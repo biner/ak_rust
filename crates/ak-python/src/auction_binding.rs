@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
-use ak_core::auction_analysis::{AuctionScanner, AuctionTick};
+use ak_core::auction::scan::{AuctionScanner, AuctionTick};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

@@ -15,7 +15,7 @@
 //! 原版 "T2 < 0.60 才排除" 的逻辑存在问题——T2 越高越像假压制，不应排除。
 
 use chrono::Timelike;
-use crate::AuctionTick;
+use crate::auction::AuctionTick;
 
 /// 卖盘假压制检测权重 (V2.0，基于实盘经验校准)
 #[derive(Debug, Clone)]

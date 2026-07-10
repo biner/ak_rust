@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
-use ak_core::auction_analysis::AuctionTick;
-use ak_core::false_sell::FalseSellDetector;
+use ak_core::auction::scan::AuctionTick;
+use ak_core::auction::false_sell::FalseSellDetector;
 
 const VERSION: &str = "2.0.0";
 

@@ -1,6 +1,6 @@
 //! 集合竞价主力吸筹分析器。
 use chrono::Timelike;
-use crate::morphology;
+use crate::auction::morphology;
 
 
 /// Convenience alias matching the Python original's class name.

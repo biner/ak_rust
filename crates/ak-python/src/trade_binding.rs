@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
-use ak_core::trade_analysis::{
+use ak_core::transaction::{
     analyze_transactions as tx_v1, analyze_transactions_v2 as tx_v2,
     analyze_transactions_v3 as tx_v3, analyze_transactions_v4 as tx_v4,
     TransactionPoint,
@@ -24,7 +24,7 @@ fn parse_txns(data: &Bound<'_, PyList>) -> PyResult<Vec<TransactionPoint>> {
     Ok(txns)
 }
 
-fn to_dict(py: Python<'_>, r: ak_core::trade_analysis::TransactionAnalysisResult) -> Py<PyAny> {
+fn to_dict(py: Python<'_>, r: ak_core::transaction::TransactionAnalysisResult) -> Py<PyAny> {
     let d = PyDict::new(py);
     d.set_item("buy_vol_ratio", r.buy_vol_ratio).unwrap();
     d.set_item("sell_vol_ratio", r.sell_vol_ratio).unwrap();
