@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
-use ak_core::auction::breakout::{analyze_breakout as ak_analyze, TransactionPoint};
+use ak_core::transaction::{analyze_breakout as ak_analyze, TransactionPoint};
 
 #[pyfunction]
 #[pyo3(signature = (data, breakout_price))]

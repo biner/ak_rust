@@ -981,6 +981,134 @@ pub fn calc_buy_sell_ratio(transactions: &[TransactionPoint]) -> Option<f64> {
     }
 }
 
+
+// ── 突破时刻分析（同逐笔成交数据）──
+
+/// 突破价格容忍比例（突破价的 99.5% 算触及突破区）
+const BREAKOUT_TOLERANCE: f64 = 0.995;
+/// 最少突破区成交笔数要求
+const MIN_BREAKOUT_TX: usize = 5;
+
+/// 突破分析结果。
+#[derive(Debug, Clone)]
+pub struct BreakoutResult {
+    pub total_n: usize,
+    pub breakout_n: usize,
+    pub breakout_vol_ratio: f64,
+    pub breakout_buy_vol: i64,
+    pub breakout_sell_vol: i64,
+    pub breakout_buy_ratio: f64,
+    pub breakout_large_count: i32,
+    pub breakout_large_buy: i32,
+    pub breakout_large_sell: i32,
+    pub breakout_large_buy_ratio: f64,
+    pub breakout_avg_price: f64,
+    pub price_sustain_ratio: f64,
+    pub is_strong: bool,
+    pub classification: String,
+    pub confidence: f64,
+    pub details: String,
+}
+
+/// 分析突破时刻的逐笔成交数据，判断是真突破还是假突破。
+pub fn analyze_breakout(
+    transactions: &[TransactionPoint],
+    breakout_price: f64,
+) -> Option<BreakoutResult> {
+    if transactions.len() < 10 { return None; }
+    let total_n = transactions.len();
+    let total_vol: i64 = transactions.iter().map(|t| t.vol).sum();
+    if total_vol == 0 { return None; }
+
+    let threshold = breakout_price * BREAKOUT_TOLERANCE;
+    let breakout_txns: Vec<&TransactionPoint> = transactions.iter().filter(|t| t.price >= threshold).collect();
+    let breakout_n = breakout_txns.len();
+    if breakout_n < MIN_BREAKOUT_TX {
+        return Some(BreakoutResult {
+            total_n, breakout_n, breakout_vol_ratio: 0.0, breakout_buy_vol: 0, breakout_sell_vol: 0,
+            breakout_buy_ratio: 0.5, breakout_large_count: 0, breakout_large_buy: 0, breakout_large_sell: 0,
+            breakout_large_buy_ratio: 0.0, breakout_avg_price: 0.0, price_sustain_ratio: 1.0,
+            is_strong: false, classification: "数据不足".into(), confidence: 0.0,
+            details: format!("突破区仅{}笔交易", breakout_n),
+        });
+    }
+
+    let breakout_vol: i64 = breakout_txns.iter().map(|t| t.vol).sum();
+    let breakout_vol_ratio = if total_vol > 0 { breakout_vol as f64 / total_vol as f64 } else { 0.0 };
+
+    let mut buy_vol: i64 = 0; let mut sell_vol: i64 = 0; let mut total_price: f64 = 0.0;
+    for t in &breakout_txns {
+        match t.bs_flag { 0 => buy_vol += t.vol, 1 => sell_vol += t.vol, _ => {} }
+        total_price += t.price;
+    }
+
+    let breakout_avg_price = total_price / breakout_n as f64;
+    let breakout_buy_ratio = if buy_vol + sell_vol > 0 { buy_vol as f64 / (buy_vol + sell_vol) as f64 } else { 0.5 };
+
+    let avg_vol = breakout_vol as f64 / breakout_n as f64;
+    let large_threshold = avg_vol * 3.0;
+    let mut large_count: i32 = 0; let mut large_buy: i32 = 0; let mut large_sell: i32 = 0;
+    for t in &breakout_txns {
+        if (t.vol as f64) > large_threshold {
+            large_count += 1;
+            match t.bs_flag { 0 => large_buy += 1, 1 => large_sell += 1, _ => {} }
+        }
+    }
+
+    let breakout_large_buy_ratio = if large_count > 0 { large_buy as f64 / large_count as f64 } else { 0.0 };
+    let last_price = breakout_txns.last().unwrap().price;
+    let price_sustain_ratio = if breakout_price > 0.0 { last_price / breakout_price } else { 1.0 };
+
+    let (confidence, classification, details) = compute_breakout_quality(
+        breakout_n, breakout_buy_ratio, large_count, large_buy, large_sell, price_sustain_ratio, breakout_vol_ratio);
+
+    Some(BreakoutResult {
+        total_n, breakout_n,
+        breakout_vol_ratio: (breakout_vol_ratio * 1000.0).round() / 1000.0,
+        breakout_buy_vol: buy_vol, breakout_sell_vol: sell_vol,
+        breakout_buy_ratio: (breakout_buy_ratio * 1000.0).round() / 1000.0,
+        breakout_large_count: large_count, breakout_large_buy: large_buy, breakout_large_sell: large_sell,
+        breakout_large_buy_ratio: (breakout_large_buy_ratio * 1000.0).round() / 1000.0,
+        breakout_avg_price: (breakout_avg_price * 100.0).round() / 100.0,
+        price_sustain_ratio: (price_sustain_ratio * 1000.0).round() / 1000.0,
+        is_strong: confidence >= 0.60, classification, confidence: (confidence * 1000.0).round() / 1000.0, details,
+    })
+}
+
+fn compute_breakout_quality(
+    breakout_n: usize, buy_ratio: f64, large_count: i32, large_buy: i32, large_sell: i32,
+    sustain_ratio: f64, vol_ratio: f64,
+) -> (f64, String, String) {
+    let mut score = 0.0_f64; let mut strengths: Vec<String> = Vec::new(); let mut risks: Vec<String> = Vec::new();
+    if buy_ratio >= 0.60 { strengths.push(format!("买盘主导({:.0}%)", buy_ratio*100.0)); score += 1.0*0.35; }
+    else if buy_ratio >= 0.55 { strengths.push(format!("买盘偏强({:.0}%)", buy_ratio*100.0)); score += 0.7*0.35; }
+    else if buy_ratio >= 0.45 { score += 0.3*0.35; }
+    else { risks.push(format!("卖盘主导({:.0}%)", (1.0-buy_ratio)*100.0)); }
+
+    if large_count >= 3 {
+        if large_buy > large_sell*2 { strengths.push(format!("大单集中买入({}/{})", large_buy, large_sell)); score += 1.0*0.30; }
+        else if large_buy > large_sell { strengths.push(format!("大单买多({}/{})", large_buy, large_sell)); score += 0.7*0.30; }
+        else if large_buy >= large_sell { score += 0.4*0.30; }
+        else { risks.push(format!("大单卖出多于买入({}/{})", large_buy, large_sell)); score += 0.1*0.30; }
+    } else if large_count >= 1 { score += 0.3*0.30; }
+    else { risks.push("突破区无大单".into()); score += 0.1*0.30; }
+
+    if sustain_ratio >= 1.005 { strengths.push(format!("站稳突破价之上({:.1}%)", (sustain_ratio-1.0)*100.0)); score += 1.0*0.25; }
+    else if sustain_ratio >= 0.998 { score += 0.6*0.25; }
+    else if sustain_ratio >= 0.99 { risks.push("价格回落".into()); score += 0.3*0.25; }
+    else { risks.push(format!("突破后回落({:.2})", sustain_ratio)); score += 0.0*0.25; }
+
+    if vol_ratio >= 0.30 { strengths.push(format!("成交活跃(占比{:.0}%)", vol_ratio*100.0)); score += 1.0*0.10; }
+    else if vol_ratio >= 0.15 { score += 0.5*0.10; }
+    else { score += 0.2*0.10; }
+
+    let confidence = score.clamp(0.0, 1.0);
+    let classification = if confidence >= 0.65 { "强突破" } else if confidence >= 0.45 { "弱突破" } else if confidence >= 0.30 { "疑似假突破" } else { "假突破" };
+    let mut d = format!("{}", classification);
+    if !strengths.is_empty() { d.push_str(&format!("｜{}", strengths.join("; "))); }
+    if !risks.is_empty() { d.push_str(&format!("｜风险: {}", risks.join("; "))); }
+    (confidence, classification.to_string(), d)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
