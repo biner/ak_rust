@@ -14,7 +14,7 @@ fn auction_morphology_names() -> Vec<&'static str> {
 
 #[pyfunction]
 #[pyo3(signature = (data, threshold=0.5, open_price=None, pre_close=None, limit_up=None, limit_down=None))]
-fn scanner_auction(
+fn analyze_auction(
     py: Python<'_>,
     data: &Bound<'_, PyList>,
     threshold: f64,
@@ -63,6 +63,6 @@ fn scanner_auction(
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(auction_scanner_version, m)?)?;
     m.add_function(wrap_pyfunction!(auction_morphology_names, m)?)?;
-    m.add_function(wrap_pyfunction!(scanner_auction, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_auction, m)?)?;
     Ok(())
 }

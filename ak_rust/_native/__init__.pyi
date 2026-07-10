@@ -45,7 +45,7 @@ def analyze_breakout(
 ) -> dict[str, Any] | None: ...
 
 # ── 集合竞价 ──
-def scanner_auction(
+def analyze_auction(
     data: list[dict[str, Any]],
     threshold: float = 0.5,
     open_price: float | None = None,
@@ -54,7 +54,7 @@ def scanner_auction(
     limit_down: float | None = None,
 ) -> dict[str, Any] | None: ...
 
-def scan_false_sell(
+def analyze_false_sell(
     data: list[dict[str, Any]],
     threshold: float = 0.5,
 ) -> dict[str, Any]: ...

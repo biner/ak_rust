@@ -10,7 +10,7 @@ fn false_sell_version() -> String { VERSION.to_string() }
 
 #[pyfunction]
 #[pyo3(signature = (data, threshold=0.5))]
-fn scan_false_sell(
+fn analyze_false_sell(
     py: Python<'_>,
     data: &Bound<'_, PyList>,
     threshold: f64,
@@ -56,6 +56,6 @@ fn scan_false_sell(
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(false_sell_version, m)?)?;
-    m.add_function(wrap_pyfunction!(scan_false_sell, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze_false_sell, m)?)?;
     Ok(())
 }
