@@ -1,0 +1,15 @@
+[package]
+name = "ak-python"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ak_python"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+ak-core = { path = "../ak-core" }
+ak-signals = { path = "../ak-signals" }
+pyo3 = { version = "0.28", features = ["extension-module", "chrono", "abi3-py310"] }
+chrono = "0.4"

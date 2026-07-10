@@ -1,0 +1,11 @@
+[package]
+name = "ak-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ak_core"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = "0.4"

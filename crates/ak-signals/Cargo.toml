@@ -1,0 +1,12 @@
+[package]
+name = "ak-signals"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ak_signals"
+path = "src/lib.rs"
+
+[dependencies]
+ak-core = { path = "../ak-core" }
+talib-rs = "=0.1.2"
