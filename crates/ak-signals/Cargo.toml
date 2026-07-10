@@ -10,3 +10,4 @@ path = "src/lib.rs"
 [dependencies]
 ak-core = { path = "../ak-core" }
 talib-rs = "=0.1.2"
+czsc-signal-macros = { path = "/data0/htdocs/czsc/crates/czsc-signal-macros" }

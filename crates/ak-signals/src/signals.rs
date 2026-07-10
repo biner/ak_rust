@@ -46,6 +46,7 @@ pub fn register_builtins() {
     r.insert("ak_dmi_state_V250714".into(), Box::new(signal_ak_dmi));
     r.insert("ak_ic_state_V250718".into(), Box::new(signal_ak_ic));
     r.insert("ak_ttm_squeeze_V250711".into(), Box::new(signal_ak_ttm));
+    r.insert("ak_wavetrend_zone_V250724".into(), Box::new(signal_ak_wt_zone));
 }
 
 pub fn list_signal_names() -> Vec<String> {
@@ -78,11 +79,13 @@ fn signal_ak_wavetrend_v260625(bars: &[BarPoint], params: &HashMap<String, Strin
     let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);
     let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
     let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
-    let prices: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    if prices.len() < n1 + n2 + n3 + 5 {
+    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
+    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    if close.len() < n1 + n2 + n3 + 5 {
         return vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
     }
-    let wt = compute_wavetrend(&prices, n1, n2, n3);
+    let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
     match get_wt_signal(&wt, di) {
         Some(s) => vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: s.zone.into(), v2: s.direction.into(), v3: s.cross.into() }],
         None => vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }],
@@ -138,7 +141,39 @@ fn signal_ak_ttm(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sig
     }
 }
 
+fn signal_ak_wt_zone(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    use crate::wavetrend::{compute_wavetrend, compute_wt_zone_signal, classify_zone_v1, long_term_state_str};
+    let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+    let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(21);
+    let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);
+    let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
+    let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
+    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
+    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
+    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
+    if close.len() < n1 + n2 + n3 + 5 {
+        return vec![SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
+    }
+    let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
+    let len = wt.len();
+    if len < di + 1 {
+        return vec![SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
+    }
+    // 遍历所有 bar，维护状态机
+    let mut prev_state = 0i32;
+    let mut last_output = SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq: freq.clone(), v1: "其他".into(), v2: "任意".into(), v3: "其他".into() };
+    for i in 1..len {
+        let (w1_c, w2_c, w1_p) = (wt[i].wt1, wt[i].wt2, wt[i-1].wt1);
+        if w1_c.is_nan() || w2_c.is_nan() || w1_p.is_nan() { continue; }
+        let (v1, v2, v3, new_state, _score) = compute_wt_zone_signal(w1_c, w2_c, w1_p, prev_state);
+        prev_state = new_state;
+        last_output = SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq: freq.clone(), v1: v1.into(), v2: v2.into(), v3: v3.into() };
+    }
+    vec![last_output]
+}
 #[cfg(test)]
+
+/// ak_wavetrend_zone_V250724
 mod tests {
     use super::*;
 
@@ -180,3 +215,4 @@ mod tests {
         assert!(names.contains(&"ak_ttm_squeeze_V250711".into()));
     }
 }
+

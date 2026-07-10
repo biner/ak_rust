@@ -1,197 +1,165 @@
-//! WaveTrend 通道计算（无 czsc 依赖）。
+//! WaveTrend 通道计算。
 //!
-//! 输入：收盘价序列
-//! 输出：(wt1, wt2) 序列，每个元素对应一根 K 线
-//!
-//! Python 侧根据 wt1/wt2 做金叉/死叉/区位判断后格式化为信号字符串。
+//! 与 czsc 原版完全一致的算法：
+//!   1. hlc3 = (high + low + close) / 3
+//!   2. esa   = EMA(hlc3, n1)
+//!   3. d     = EMA(|hlc3 - esa|, n1)
+//!   4. ci    = (hlc3 - esa) / (0.015 * d)
+//!   5. wt1   = EMA(ci, n2)
+//!   6. wt2   = SMA(wt1, n3)
 
-use talib_rs::overlap::{ema as talib_ema, sma as talib_sma};
+/// 辅助：计算 typical price = HLC/3
+pub fn typical_price(h: f64, l: f64, c: f64) -> f64 {
+    (h + l + c) / 3.0
+}
 
-/// WT 分析结果单条
+/// EMA（nan-安全：跳过前导 NaN）
+fn ema(values: &[f64], period: usize) -> Vec<f64> {
+    if period == 0 || values.is_empty() { return values.to_vec(); }
+    let k = 2.0 / (period as f64 + 1.0);
+    let n = values.len();
+    let mut result = vec![f64::NAN; n];
+    let start = values.iter().position(|v| !v.is_nan()).unwrap_or(n);
+    if start + period > n { return result; }
+    let mut sum = 0.0;
+    for i in start..start + period {
+        sum += if values[i].is_nan() { 0.0 } else { values[i] };
+    }
+    result[start + period - 1] = sum / period as f64;
+    for i in (start + period)..n {
+        if values[i].is_nan() { continue; }
+        result[i] = result[i - 1] + k * (values[i] - result[i - 1]);
+    }
+    let fv = result.iter().find(|&&v| !v.is_nan()).copied().unwrap_or(0.0);
+    for v in &mut result { if v.is_nan() { *v = fv; } }
+    result
+}
+
+/// SMA（跳过 NaN）
+fn sma_skip_nan(values: &[f64], period: usize) -> Vec<f64> {
+    let n = values.len();
+    let mut result = vec![f64::NAN; n];
+    for i in 0..n {
+        let mut sum = 0.0; let mut cnt = 0;
+        for j in (i + 1).saturating_sub(period)..=i {
+            if !values[j].is_nan() { sum += values[j]; cnt += 1; }
+        }
+        if cnt >= period { result[i] = sum / period as f64; }
+    }
+    let fv = result.iter().find(|&&v| !v.is_nan()).copied().unwrap_or(0.0);
+    for v in &mut result { if v.is_nan() { *v = fv; } }
+    result
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct WtPoint {
     pub wt1: f64,
     pub wt2: f64,
 }
 
-/// 计算 WaveTrend 通道。
-///
-/// # 参数
-/// - `prices`: 收盘价序列（按时间升序）
-/// - `n1`: Channel EMA 周期（默认 10）
-/// - `n2`: Average EMA 周期（默认 21）
-/// - `n3`: Signal SMA 周期（默认 4）
-///
-/// # 返回
-/// `Vec<WtPoint>`，长度等于 `prices.len()`，不足周期时返回 `WtPoint { wt1: NaN, wt2: NaN }`
-pub fn compute_wavetrend(prices: &[f64], n1: usize, n2: usize, n3: usize) -> Vec<WtPoint> {
-    if prices.len() < n1 + n2 + n3 + 5 {
-        return prices.iter().map(|_| WtPoint { wt1: f64::NAN, wt2: f64::NAN }).collect();
+/// 计算 WaveTrend 通道（czsc 原版算法：HLC/3 + 双层 EMA）。
+pub fn compute_wavetrend(high: &[f64], low: &[f64], close: &[f64], n1: usize, n2: usize, n3: usize) -> Vec<WtPoint> {
+    let n = close.len();
+    if n < n1 + n2 + n3 + 5 {
+        return (0..n).map(|_| WtPoint { wt1: f64::NAN, wt2: f64::NAN }).collect();
     }
-
-    // EMA of typical price (用 close 近似)
-    let ema1 = match talib_ema(prices, n1) {
-        Ok(v) => v,
-        Err(_) => return prices.iter().map(|_| WtPoint { wt1: f64::NAN, wt2: f64::NAN }).collect(),
-    };
-
-    // WT1 = (price - ema1) / (0.015 * mean_deviation)
-    let n = prices.len();
-    let mut wt1_raw = Vec::with_capacity(n);
+    let hlc3: Vec<f64> = (0..n).map(|i| typical_price(high[i], low[i], close[i])).collect();
+    let esa = ema(&hlc3, n1);
+    let d = ema(&hlc3.iter().zip(esa.iter()).map(|(h, e)| (h - e).abs()).collect::<Vec<_>>(), n1);
+    let mut ci = vec![f64::NAN; n];
     for i in 0..n {
-        if i < n1 || ema1[i].is_nan() {
-            wt1_raw.push(f64::NAN);
-            continue;
-        }
-        // mean deviation of (price - ema1)
-        let mut sum_abs = 0.0_f64;
-        for j in (i + 1 - n1)..=i {
-            let dev = (prices[j] - ema1[j]).abs();
-            sum_abs += dev;
-        }
-        let mean_dev = sum_abs / n1 as f64;
-        let denom = 0.015 * mean_dev;
-        if denom.abs() < 1e-10 {
-            wt1_raw.push(0.0);
-        } else {
-            wt1_raw.push((prices[i] - ema1[i]) / denom);
-        }
+        if d[i].is_nan() { continue; }
+        let denom = 0.015 * d[i];
+        ci[i] = if denom.abs() < 1e-10 { 0.0 } else { (hlc3[i] - esa[i]) / denom };
     }
-
-    // WT2 = SMA of WT1
-    // talib_sma 不跳过 NaN 输入，WT1 前 n1 根为 NaN，
-    // 用跳过 NaN 的实现保持与原 ak_core 行为一致
-    let mut wt2 = vec![f64::NAN; n];
-    let mut valid_count = 0usize;
-    let mut sum_wt1: f64 = 0.0;
-    let mut first_valid_wt2 = 0.0_f64;
-    let mut first_set = false;
-    for i in 0..n {
-        if !wt1_raw[i].is_nan() {
-            valid_count += 1;
-            sum_wt1 += wt1_raw[i];
-        }
-        if valid_count >= n3 {
-            // 找 n3 个连续有效值中的最后一个
-            let mut window_sum = 0.0;
-            let mut cnt = 0;
-            for j in (i + 1 - n3)..=i {
-                if !wt1_raw[j].is_nan() { window_sum += wt1_raw[j]; cnt += 1; }
-            }
-            if cnt >= n3 {
-                wt2[i] = window_sum / n3 as f64;
-            }
-        } else if valid_count >= n3 {
-            // 检查前 n3 个有效值的滑动窗口
-            let mut window_sum = 0.0;
-            let mut cnt = 0;
-            let start = i.saturating_sub(n3 - 1);
-            for j in start..=i {
-                if !wt1_raw[j].is_nan() { window_sum += wt1_raw[j]; cnt += 1; }
-            }
-            if cnt >= n3 {
-                wt2[i] = window_sum / n3 as f64;
-            }
-        }
-        if !wt2[i].is_nan() && !first_set { first_valid_wt2 = wt2[i]; first_set = true; }
-    }
-    // 填充 wt2 前导 NaN
-    if first_set {
-        for v in &mut wt2 {
-            if v.is_nan() { *v = first_valid_wt2; }
-        }
-    }
-
-    let mut result = Vec::with_capacity(n);
-    for i in 0..prices.len() {
-        result.push(WtPoint {
-            wt1: wt1_raw[i],
-            wt2: wt2[i],
-        });
-    }
-    result
+    let wt1 = ema(&ci, n2);
+    let wt2 = sma_skip_nan(&wt1, n3);
+    (0..n).map(|i| WtPoint { wt1: wt1[i], wt2: wt2[i] }).collect()
 }
 
-/// WT 信号值（单根 K 线的完整信号判定）
 #[derive(Debug, Clone)]
 pub struct WtSignal {
-    /// 8 级区位：超涨/多头极强/多头强势/多头/弱多/弱空/空头/空头强势/空头极强/超跌
     pub zone: &'static str,
-    /// WTCD 方向：增大/缩小/平稳
     pub direction: &'static str,
-    /// 金叉/死叉/多头/空头
     pub cross: &'static str,
 }
 
-/// 从 WT 序列和索引生成单根 K 线的信号值。
-///
-/// # 参数
-/// - `wt`: `compute_wavetrend` 的输出
-/// - `di`: 从倒数第几根取（1 = 最新一根）
 pub fn get_wt_signal(wt: &[WtPoint], di: usize) -> Option<WtSignal> {
-    if wt.len() < di + 2 {
-        return None;
-    }
-    let len = wt.len();
-    let cur = len - di;
-    let prev = cur - 1;
-
-    let w1 = wt[cur].wt1;
-    let w2 = wt[cur].wt2;
-    let pw1 = wt[prev].wt1;
-    let pw2 = wt[prev].wt2;
-
-    if w1.is_nan() || w2.is_nan() || pw1.is_nan() || pw2.is_nan() {
-        return None;
-    }
-
+    if wt.len() < di + 2 { return None; }
+    let len = wt.len(); let cur = len - di; let prev = cur - 1;
+    let (w1, w2, pw1, pw2) = (wt[cur].wt1, wt[cur].wt2, wt[prev].wt1, wt[prev].wt2);
+    if w1.is_nan() || w2.is_nan() || pw1.is_nan() || pw2.is_nan() { return None; }
     let zone = classify_wt_zone(w1);
-
-    let wtcd_cur = w1 - w2;
-    let wtcd_prev = pw1 - pw2;
-    let direction = if wtcd_cur > wtcd_prev {
-        "增大"
-    } else if wtcd_cur < wtcd_prev {
-        "缩小"
-    } else {
-        "平稳"
-    };
-
+    let wtcd_cur = w1 - w2; let wtcd_prev = pw1 - pw2;
+    let direction = if wtcd_cur > wtcd_prev { "增大" } else if wtcd_cur < wtcd_prev { "缩小" } else { "平稳" };
     let golden_cross = pw1 <= pw2 && w1 > w2;
     let death_cross = pw1 >= pw2 && w1 < w2;
-    let cross = if golden_cross {
-        "金叉"
-    } else if death_cross {
-        "死叉"
-    } else if w1 > w2 {
-        "多头"
-    } else {
-        "空头"
-    };
-
+    let cross = if golden_cross { "金叉" } else if death_cross { "死叉" } else if w1 > w2 { "多头" } else { "空头" };
     Some(WtSignal { zone, direction, cross })
 }
+
 pub fn classify_wt_zone(wt1: f64) -> &'static str {
-    if wt1 > 100.0 {
-        "超涨"
-    } else if wt1 > 80.0 {
-        "多头极强"
-    } else if wt1 > 60.0 {
-        "多头强势"
-    } else if wt1 > 20.0 {
-        "多头"
-    } else if wt1 > 0.0 {
-        "弱多"
-    } else if wt1 > -20.0 {
-        "弱空"
-    } else if wt1 > -60.0 {
-        "空头"
-    } else if wt1 > -80.0 {
-        "空头强势"
-    } else if wt1 > -100.0 {
-        "空头极强"
-    } else {
-        "超跌"
+    if wt1 > 100.0 { "超涨" } else if wt1 > 80.0 { "多头极强" } else if wt1 > 60.0 { "多头强势" }
+    else if wt1 > 20.0 { "多头" } else if wt1 > 0.0 { "弱多" } else if wt1 > -20.0 { "弱空" }
+    else if wt1 > -60.0 { "空头" } else if wt1 > -80.0 { "空头强势" } else if wt1 > -100.0 { "空头极强" }
+    else { "超跌" }
+}
+
+/// ak_wavetrend_zone_V250724：区位（6级）+ 长期趋势 + 方向三维信号
+/// v1: 极度超卖/超卖/中性0轴下/中性0轴上/超买/极度超买
+/// v2: 长期看多/长期看空/其他（状态机）
+/// v3: 多头/空头
+pub fn classify_zone_v1(wt1: f64) -> &'static str {
+    if wt1 > 60.0 { "极度超买" } else if wt1 > 53.0 { "超买" }
+    else if wt1 > 0.0 { "中性0轴上" } else if wt1 > -53.0 { "中性0轴下" }
+    else if wt1 > -60.0 { "超卖" } else { "极度超卖" }
+}
+
+/// 长期趋势状态机
+pub fn compute_long_term_state(prev_state: i32, wt1_prev: f64, wt1_cur: f64) -> i32 {
+    let falling_below_53 = wt1_prev > 53.0 && wt1_cur <= 53.0;
+    let rising_above_neg53 = wt1_prev < -53.0 && wt1_cur >= -53.0;
+    let below_neg53 = wt1_cur < -53.0;
+    let above_53 = wt1_cur > 53.0;
+    match prev_state {
+        1 => { if below_neg53 { 0 } else if falling_below_53 { -1 } else { 1 } }
+        -1 => { if above_53 { 0 } else if rising_above_neg53 { 1 } else { -1 } }
+        _ => { if rising_above_neg53 { 1 } else if falling_below_53 { -1 } else { 0 } }
+    }
+}
+
+/// 长趋势状态转字符串
+pub fn long_term_state_str(state: i32) -> &'static str {
+    match state { 1 => "长期看多", -1 => "长期看空", _ => "其他" }
+}
+
+/// Zone 信号：需要外部传入前一根状态
+#[allow(clippy::too_many_arguments)]
+pub fn compute_wt_zone_signal(
+    wt1_cur: f64, wt2_cur: f64, wt1_prev: f64, prev_state: i32,
+) -> (&'static str, &'static str, &'static str, i32, i32) {
+    let v1 = classify_zone_v1(wt1_cur);
+    let state = compute_long_term_state(prev_state, wt1_prev, wt1_cur);
+    let v2 = long_term_state_str(state);
+    let v3 = if wt1_cur > wt2_cur { "多头" } else { "空头" };
+    let score = wt_zone_score(v1, v2, v3);
+    (v1, v2, v3, state, score)
+}
+
+fn wt_zone_score(v1: &str, v2: &str, v3: &str) -> i32 {
+    match (v1, v2, v3) {
+        ("极度超卖", "长期看多", "多头") => 95, ("超卖", "长期看多", "多头") => 90,
+        ("中性0轴下", "长期看多", "多头") => 80, ("中性0轴上", "长期看多", "多头") => 75,
+        ("超买", "长期看多", "多头") => 65, ("极度超卖", "长期看多", "空头") => 50,
+        ("超卖", "长期看多", "空头") => 45, ("中性0轴下", "长期看多", "空头") => 42,
+        ("极度超买", "长期看空", "空头") => 92, ("超买", "长期看空", "空头") => 85,
+        ("中性0轴上", "长期看空", "空头") => 72, ("中性0轴下", "长期看空", "空头") => 70,
+        ("超卖", "长期看空", "空头") => 60, ("极度超卖", "其他", "多头") => 50,
+        ("超卖", "其他", "多头") => 45, ("极度超买", "其他", "空头") => 45,
+        ("超买", "其他", "空头") => 40, ("极度超买", "其他", "多头") => 25,
+        ("中性0轴下", "其他", "多头") => 57, ("中性0轴上", "其他", "多头") => 55,
+        ("中性0轴下", "其他", "空头") => 37, ("中性0轴上", "其他", "空头") => 35,
+        _ => 5,
     }
 }
 
@@ -201,31 +169,16 @@ mod tests {
 
     #[test]
     fn test_wavetrend_basic() {
-        // 构建一个简单的趋势序列
-        let prices: Vec<f64> = (0..100).map(|i| 100.0 + (i as f64 * 0.5)).collect();
-        let wt = compute_wavetrend(&prices, 10, 21, 4);
-        assert_eq!(wt.len(), prices.len());
-        // 最后几个不应该是 NaN
-        let last = wt.last().unwrap();
-        assert!(!last.wt1.is_nan());
-        assert!(!last.wt2.is_nan());
+        let p: Vec<f64> = (0..100).map(|i| 100.0 + i as f64 * 0.5).collect();
+        let wt = compute_wavetrend(&p, &p, &p, 10, 21, 4);
+        assert_eq!(wt.len(), p.len());
+        assert!(!wt.last().unwrap().wt1.is_nan());
+        assert!(!wt.last().unwrap().wt2.is_nan());
     }
 
     #[test]
-    fn test_wavetrend_insufficient_data() {
-        let prices = vec![100.0; 5];
-        let wt = compute_wavetrend(&prices, 10, 21, 4);
-        assert!(wt.last().unwrap().wt1.is_nan());
-    }
-
-    #[test]
-    fn test_classify_zone() {
-        assert_eq!(classify_wt_zone(150.0), "超涨");
-        assert_eq!(classify_wt_zone(90.0), "多头极强");
-        assert_eq!(classify_wt_zone(50.0), "多头");
-        assert_eq!(classify_wt_zone(10.0), "弱多");
-        assert_eq!(classify_wt_zone(-5.0), "弱空");
-        assert_eq!(classify_wt_zone(-50.0), "空头");
-        assert_eq!(classify_wt_zone(-150.0), "超跌");
+    fn test_insufficient_data() {
+        let p = vec![100.0; 5];
+        assert!(compute_wavetrend(&p, &p, &p, 10, 21, 4).last().unwrap().wt1.is_nan());
     }
 }

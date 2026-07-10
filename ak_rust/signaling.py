@@ -16,7 +16,7 @@ from . import _native
 from czsc import RawBar, Freq, generate_czsc_signals
 import pandas as pd
 
-AK_SIGNALS = {"ak_wavetrend_V260625", "ak_dmi_state_V250714", "ak_ic_state_V250718", "ak_ttm_squeeze_V250711"}
+AK_SIGNALS = {"ak_wavetrend_V260625", "ak_wavetrend_zone_V250724", "ak_dmi_state_V250714", "ak_ic_state_V250718", "ak_ttm_squeeze_V250711"}
 
 
 def generate_all_signals(bars: list[RawBar], signals_config: list[dict], df: bool = True) -> pd.DataFrame:

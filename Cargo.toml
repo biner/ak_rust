@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/ak-core", "crates/ak-signals", "crates/ak-python"]
+members = ["crates/ak-core", "crates/ak-signals", "crates/ak-python", "crates/ak-signal-macros"]
 resolver = "2"
 
 [workspace.package]
