@@ -52,9 +52,9 @@ fn to_dict(py: Python<'_>, r: ak_core::transaction::TransactionAnalysisResult) -
     d.into_any().into()
 }
 
-macro_rules! make_tx_fn {
-    ($name:ident, $ak_fn:path) => {
-        #[pyfunction]
+macro_rules! make_tx_name_fn {
+    ($name:ident, $ak_fn:path, $py_name:expr) => {
+        #[pyfunction(name = $py_name)]
         #[pyo3(signature = (data, pre_close, high, low))]
         fn $name(py: Python<'_>, data: &Bound<'_, PyList>, pre_close: f64, high: f64, low: f64) -> PyResult<Py<PyAny>> {
             let txns = parse_txns(data)?;
@@ -66,15 +66,15 @@ macro_rules! make_tx_fn {
     };
 }
 
-make_tx_fn!(analyze_transactions, tx_v1);
-make_tx_fn!(analyze_transactions_v2, tx_v2);
-make_tx_fn!(analyze_transactions_v3, tx_v3);
-make_tx_fn!(analyze_transactions_v4, tx_v4);
+make_tx_name_fn!(trans_analysis, tx_v1, "trans_analysis");
+make_tx_name_fn!(trans_analysis_v2, tx_v2, "trans_analysis_v2");
+make_tx_name_fn!(trans_analysis_v3, tx_v3, "trans_analysis_v3");
+make_tx_name_fn!(trans_analysis_v4, tx_v4, "trans_analysis_v4");
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(analyze_transactions, m)?)?;
-    m.add_function(wrap_pyfunction!(analyze_transactions_v2, m)?)?;
-    m.add_function(wrap_pyfunction!(analyze_transactions_v3, m)?)?;
-    m.add_function(wrap_pyfunction!(analyze_transactions_v4, m)?)?;
+    m.add_function(wrap_pyfunction!(trans_analysis, m)?)?;
+    m.add_function(wrap_pyfunction!(trans_analysis_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(trans_analysis_v3, m)?)?;
+    m.add_function(wrap_pyfunction!(trans_analysis_v4, m)?)?;
     Ok(())
 }

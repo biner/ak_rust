@@ -8,7 +8,7 @@ const VERSION: &str = "2.0.0";
 #[pyfunction]
 fn false_sell_version() -> String { VERSION.to_string() }
 
-#[pyfunction]
+#[pyfunction(name = "auction_false_sell")]
 #[pyo3(signature = (data, threshold=0.5))]
 fn analyze_false_sell(
     py: Python<'_>,

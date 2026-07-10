@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 use ak_core::tick::{analyze_tick_chart as ak_analyze_tick, TickPoint};
 
-#[pyfunction]
+#[pyfunction(name = "tick_analysis")]
 #[pyo3(signature = (data, pre_close, low_price=None, close_pos_threshold=0.3))]
 fn analyze_tick_chart(
     py: Python<'_>,

@@ -12,7 +12,7 @@ fn auction_morphology_names() -> Vec<&'static str> {
     ak_core::MORPHOLOGY_NAMES.to_vec()
 }
 
-#[pyfunction]
+#[pyfunction(name = "auction_scan")]
 #[pyo3(signature = (data, threshold=0.5, open_price=None, pre_close=None, limit_up=None, limit_down=None))]
 fn analyze_auction(
     py: Python<'_>,

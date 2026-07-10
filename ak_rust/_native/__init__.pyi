@@ -2,7 +2,7 @@
 from typing import Any, Optional
 
 # ── tick 量价分析 ──
-def analyze_tick_chart(
+def tick_analysis(
     data: list[dict[str, Any]],
     pre_close: float,
     low_price: float | None = None,
@@ -10,28 +10,28 @@ def analyze_tick_chart(
 ) -> dict[str, Any] | None: ...
 
 # ── 逐笔成交分析 ──
-def analyze_transactions(
+def trans_analysis(
     data: list[dict[str, Any]],
     pre_close: float,
     high: float,
     low: float,
 ) -> dict[str, Any] | None: ...
 
-def analyze_transactions_v2(
+def trans_analysis_v2(
     data: list[dict[str, Any]],
     pre_close: float,
     high: float,
     low: float,
 ) -> dict[str, Any] | None: ...
 
-def analyze_transactions_v3(
+def trans_analysis_v3(
     data: list[dict[str, Any]],
     pre_close: float,
     high: float,
     low: float,
 ) -> dict[str, Any] | None: ...
 
-def analyze_transactions_v4(
+def trans_analysis_v4(
     data: list[dict[str, Any]],
     pre_close: float,
     high: float,
@@ -39,13 +39,13 @@ def analyze_transactions_v4(
 ) -> dict[str, Any] | None: ...
 
 # ── 突破时刻分析 ──
-def analyze_breakout(
+def trans_breakout(
     data: list[dict[str, Any]],
     breakout_price: float,
 ) -> dict[str, Any] | None: ...
 
 # ── 集合竞价 ──
-def analyze_auction(
+def auction_scan(
     data: list[dict[str, Any]],
     threshold: float = 0.5,
     open_price: float | None = None,
@@ -54,7 +54,7 @@ def analyze_auction(
     limit_down: float | None = None,
 ) -> dict[str, Any] | None: ...
 
-def analyze_false_sell(
+def auction_false_sell(
     data: list[dict[str, Any]],
     threshold: float = 0.5,
 ) -> dict[str, Any]: ...

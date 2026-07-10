@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 use ak_core::transaction::{analyze_breakout as ak_analyze, TransactionPoint};
 
-#[pyfunction]
+#[pyfunction(name = "trans_breakout")]
 #[pyo3(signature = (data, breakout_price))]
 fn analyze_breakout(
     py: Python<'_>,
