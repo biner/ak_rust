@@ -43,7 +43,7 @@ fn analyze_auction(
         Some(r) => {
             let d = PyDict::new(py);
             d.set_item("score", r.score)?;
-            d.set_item("match_", r.match_)?;
+            d.set_item("match", r.match_)?;
             d.set_item("steps", r.steps)?;
             d.set_item("eff_steps", r.eff_steps)?;
             d.set_item("neg_pos_alt", r.neg_pos_alt)?;
@@ -55,6 +55,8 @@ fn analyze_auction(
             d.set_item("morphology", &r.morphology)?;
             d.set_item("morphology_conf", r.morphology_conf)?;
             d.set_item("morphology_tag", &r.morphology_tag)?;
+            d.set_item("morphology_scores", r.morphology_scores.to_vec())?;
+            d.set_item("morphology_group", &r.morphology_group)?;
             Ok(d.into_any().into())
         }
     }
