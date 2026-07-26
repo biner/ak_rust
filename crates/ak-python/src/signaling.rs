@@ -38,6 +38,17 @@ fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars:
                 params = py_params;
             }
         }
+        // 兼容顶层参数（用户把 n1/n2/n3/di 直接放在 dict 顶层而非 params 子字典）
+        if params.is_empty() {
+            for (key, val) in d.iter() {
+                let k: String = key.extract::<String>().unwrap_or_default();
+                if k != "name" && k != "freq" && k != "params" {
+                    if let Ok(v) = val.extract::<String>() {
+                        params.insert(k, v);
+                    }
+                }
+            }
+        }
         configs.push(SignalConfig { name, freq, params });
     }
 

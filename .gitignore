@@ -156,3 +156,4 @@ scripts/auto-czsc-quant/results/
 .multica/
 .agent_context/
 .claude/skills/
+ak_rust/ttm_v20.py
