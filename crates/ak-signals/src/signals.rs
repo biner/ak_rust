@@ -43,10 +43,10 @@ fn get_registry() -> std::sync::MutexGuard<'static, HashMap<String, SignalFn>> {
 pub fn register_builtins() {
     let mut r = get_registry();
     r.insert("ak_wavetrend_V260625".into(), Box::new(signal_ak_wavetrend_v260625));
-    r.insert("ak_dmi_state_V250714".into(), Box::new(signal_ak_dmi));
-    r.insert("ak_ic_state_V250718".into(), Box::new(signal_ak_ic));
-    r.insert("ak_ttm_squeeze_V250711".into(), Box::new(signal_ak_ttm));
-    r.insert("ak_wavetrend_zone_V250724".into(), Box::new(signal_ak_wt_zone));
+    r.insert("ak_dmi_state_V260714".into(), Box::new(signal_ak_dmi));
+    r.insert("ak_ic_state_V260718".into(), Box::new(signal_ak_ic));
+    r.insert("ak_ttm_squeeze_V260711".into(), Box::new(signal_ak_ttm));
+    r.insert("ak_wavetrend_zone_V260724".into(), Box::new(signal_ak_wt_zone));
 }
 
 pub fn list_signal_names() -> Vec<String> {
@@ -101,8 +101,8 @@ fn signal_ak_dmi(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sig
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     match dmi::compute_dmi(&high, &low, &close, n1, n2, di) {
-        Some(s) => vec![SignalOutput { name: "ak_dmi_state_V250714".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-        None => vec![SignalOutput { name: "ak_dmi_state_V250714".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
+        Some(s) => vec![SignalOutput { name: "ak_dmi_state_V260714".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
+        None => vec![SignalOutput { name: "ak_dmi_state_V260714".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
     }
 }
 
@@ -116,8 +116,8 @@ fn signal_ak_ic(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sign
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     match ic::compute_ic_state(&high, &low, &close, n1, n2, n3, di) {
-        Some(s) => vec![SignalOutput { name: "ak_ic_state_V250718".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-        None => vec![SignalOutput { name: "ak_ic_state_V250718".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
+        Some(s) => vec![SignalOutput { name: "ak_ic_state_V260718".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
+        None => vec![SignalOutput { name: "ak_ic_state_V260718".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
     }
 }
 
@@ -134,10 +134,10 @@ fn signal_ak_ttm(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sig
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     match ttm::compute_ttm(&high, &low, &close, n1, n2, n3, n4, n5) {
         Some((ttm, sqz_on, sqz_off)) => match ttm::get_ttm_signal(&ttm, &sqz_on, &sqz_off, di) {
-            Some(s) => vec![SignalOutput { name: "ak_ttm_squeeze_V250711".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-            None => vec![SignalOutput { name: "ak_ttm_squeeze_V250711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
+            Some(s) => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
+            None => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
         },
-        None => vec![SignalOutput { name: "ak_ttm_squeeze_V250711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
+        None => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
     }
 }
 
@@ -152,28 +152,28 @@ fn signal_ak_wt_zone(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     if close.len() < n1 + n2 + n3 + 5 {
-        return vec![SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
+        return vec![SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
     }
     let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
     let len = wt.len();
     if len < di + 1 {
-        return vec![SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
+        return vec![SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
     }
     // 遍历所有 bar，维护状态机
     let mut prev_state = 0i32;
-    let mut last_output = SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq: freq.clone(), v1: "其他".into(), v2: "任意".into(), v3: "其他".into() };
+    let mut last_output = SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq: freq.clone(), v1: "其他".into(), v2: "任意".into(), v3: "其他".into() };
     for i in 1..len {
         let (w1_c, w2_c, w1_p) = (wt[i].wt1, wt[i].wt2, wt[i-1].wt1);
         if w1_c.is_nan() || w2_c.is_nan() || w1_p.is_nan() { continue; }
         let (v1, v2, v3, new_state, _score) = compute_wt_zone_signal(w1_c, w2_c, w1_p, prev_state);
         prev_state = new_state;
-        last_output = SignalOutput { name: "ak_wavetrend_zone_V250724".into(), freq: freq.clone(), v1: v1.into(), v2: v2.into(), v3: v3.into() };
+        last_output = SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq: freq.clone(), v1: v1.into(), v2: v2.into(), v3: v3.into() };
     }
     vec![last_output]
 }
 #[cfg(test)]
 
-/// ak_wavetrend_zone_V250724
+/// ak_wavetrend_zone_V260724
 mod tests {
     use super::*;
 
@@ -199,7 +199,7 @@ mod tests {
     fn test_dispatch_dmi() {
         register_builtins();
         let bars = make_bars(100);
-        let sigs = dispatch_one("ak_dmi_state_V250714", &bars, &HashMap::from([("n1".into(),"14".into()),("n2".into(),"6".into())]));
+        let sigs = dispatch_one("ak_dmi_state_V260714", &bars, &HashMap::from([("n1".into(),"14".into()),("n2".into(),"6".into())]));
         assert_eq!(sigs.len(), 1);
         println!("DMI v1={v1} v2={v2} v3={v3}", v1=sigs[0].v1, v2=sigs[0].v2, v3=sigs[0].v3);
         assert!(["盘整","酝酿","趋势","强趋势","其他"].contains(&sigs[0].v1.as_str()));
@@ -210,9 +210,9 @@ mod tests {
         register_builtins();
         let names = list_signal_names();
         assert!(names.contains(&"ak_wavetrend_V260625".into()));
-        assert!(names.contains(&"ak_dmi_state_V250714".into()));
-        assert!(names.contains(&"ak_ic_state_V250718".into()));
-        assert!(names.contains(&"ak_ttm_squeeze_V250711".into()));
+        assert!(names.contains(&"ak_dmi_state_V260714".into()));
+        assert!(names.contains(&"ak_ic_state_V260718".into()));
+        assert!(names.contains(&"ak_ttm_squeeze_V260711".into()));
     }
 }
 

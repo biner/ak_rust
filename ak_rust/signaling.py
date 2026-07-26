@@ -7,7 +7,7 @@
         {"name": "ak_wavetrend_V260625", "freq": "日线",
          "params": {"n1": "50", "n2": "105", "n3": "20"}},
         {"name": "obvm_line_V230610", "freq": "日线", "n": 6, "m": 14},
-        {"name": "ak_dmi_state_V250714", "freq": "日线", "n2": 14},
+        {"name": "ak_dmi_state_V260714", "freq": "日线", "n2": 14},
     ]
     sdf = generate_all_signals(bars, signals_config)
 """
@@ -16,10 +16,10 @@ from . import _native
 from czsc import RawBar, generate_czsc_signals
 import pandas as pd
 
-AK_SIGNALS = {"ak_wavetrend_V260625", "ak_wavetrend_zone_V250724", "ak_dmi_state_V250714", "ak_ic_state_V250718", "ak_ttm_squeeze_V250711"}
+AK_SIGNALS = {"ak_wavetrend_V260625", "ak_wavetrend_zone_V260724", "ak_dmi_state_V260714", "ak_ic_state_V260718", "ak_ttm_squeeze_V260711"}
 
 
-def generate_all_signals(bars: list[RawBar], signals_config: list[dict]) -> pd.DataFrame:
+def generate_all_signals(bars: list[RawBar], signals_config: list[dict], df: bool = True) -> pd.DataFrame:
     """统一信号调度：ak_rust + czsc 混合。
     
     ak 信号走 ak_rust（WT），czsc 信号走 czsc（OBV/DMI/VOL 等）。
@@ -29,7 +29,7 @@ def generate_all_signals(bars: list[RawBar], signals_config: list[dict]) -> pd.D
 
     sdf = pd.DataFrame()
     if czsc_cfg:
-        sdf = generate_czsc_signals(bars, signals_config=czsc_cfg, df=True)
+        sdf = generate_czsc_signals(bars, signals_config=czsc_cfg, df=df)
 
     if ak_cfg:
         ak_bars = [_bar_to_dict(b) for b in bars]

@@ -115,7 +115,7 @@ czsc 原版算法：HLC/3 → EMA → CI → WT1 → WT2，输出三维信号：
 - **v2 (direction)**: 增大 / 缩小 / 平稳
 - **v3 (cross)**: 金叉 / 死叉 / 多头 / 空头
 
-#### WaveTrend Zone (`ak_wavetrend_zone_V250724`)
+#### WaveTrend Zone (`ak_wavetrend_zone_V260724`)
 
 六区域定位 + 长期趋势状态机 + 多空方向，综合评分：
 
@@ -123,7 +123,7 @@ czsc 原版算法：HLC/3 → EMA → CI → WT1 → WT2，输出三维信号：
 - **v2**: 长期看多 / 长期看空 / 其他
 - **v3**: 多头 / 空头
 
-#### DMI 状态 (`ak_dmi_state_V250714`)
+#### DMI 状态 (`ak_dmi_state_V260714`)
 
 基于 TA-Lib ±DI / ADX 的三维信号：
 
@@ -131,7 +131,7 @@ czsc 原版算法：HLC/3 → EMA → CI → WT1 → WT2，输出三维信号：
 - **v2 (±DI 差值)**: 多头强势 / 多头 / 缠绕 / 空头 / 空头强势
 - **v3 (ADX 斜率)**: 上升 / 下降 / 平稳
 
-#### IC 云图 (`ak_ic_state_V250718`)
+#### IC 云图 (`ak_ic_state_V260718`)
 
 Ichimoku Cloud 四线（CL/DL/A/B）位置/云型/线态三维信号：
 
@@ -139,7 +139,7 @@ Ichimoku Cloud 四线（CL/DL/A/B）位置/云型/线态三维信号：
 - **v2 (云型)**: 上升云 / 下降云
 - **v3 (线态)**: 双强 / 双高 / 高影 / 线内 / 低影 / 双低 / 双弱 / CL金叉 / CL死叉
 
-#### TTM Squeeze (`ak_ttm_squeeze_V250711`)
+#### TTM Squeeze (`ak_ttm_squeeze_V260711`)
 
 Bollinger Bands ± Keltner Channel 挤压/震动三维信号：
 
@@ -232,7 +232,7 @@ bars = [RawBar(...), ...]
 signals_config = [
     {"name": "ak_wavetrend_V260625", "freq": "日线",
      "params": {"n1": "50", "n2": "105", "n3": "20"}},
-    {"name": "ak_dmi_state_V250714", "freq": "日线", "n2": 14},
+    {"name": "ak_dmi_state_V260714", "freq": "日线", "n2": 14},
 ]
 sdf = generate_all_signals(bars, signals_config)
 ```
@@ -244,10 +244,10 @@ sdf = generate_all_signals(bars, signals_config)
 | 信号名称 | 版本 | 说明 | v1 | v2 | v3 |
 |---------|------|------|----|----|----|
 | `ak_wavetrend_V260625` | V260625 | WaveTrend 多空/方向/交叉 | 多空区域 | 趋势方向 | 金叉死叉 |
-| `ak_wavetrend_zone_V250724` | V250724 | WaveTrend 区域/长期趋势/方向 | 6级区位 | 长期趋势 | 多空方向 |
-| `ak_dmi_state_V250714` | V250714 | DMI 趋势/方向/动量 | ADX强度 | ±DI强弱 | ADX斜率 |
-| `ak_ic_state_V250718` | V250718 | IC 云图位置/云型/线态 | 8种位置 | 云型 | 8种线态 |
-| `ak_ttm_squeeze_V250711` | V250711 | TTM 方向/交叉/挤压 | 多空方向 | 12种交叉 | 挤压状态 |
+| `ak_wavetrend_zone_V260724` | V250724 | WaveTrend 区域/长期趋势/方向 | 6级区位 | 长期趋势 | 多空方向 |
+| `ak_dmi_state_V260714` | V250714 | DMI 趋势/方向/动量 | ADX强度 | ±DI强弱 | ADX斜率 |
+| `ak_ic_state_V260718` | V250718 | IC 云图位置/云型/线态 | 8种位置 | 云型 | 8种线态 |
+| `ak_ttm_squeeze_V260711` | V250711 | TTM 方向/交叉/挤压 | 多空方向 | 12种交叉 | 挤压状态 |
 
 ---
 

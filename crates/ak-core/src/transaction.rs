@@ -29,10 +29,6 @@ const MIN_INST_VOL: f64 = 5000.0;
 const LAST_30_HOUR: u32 = 14;
 const LAST_30_MIN: u32 = 0;
 
-/// 开盘初期（9:30-10:00，常含集合竞价余波）
-const OPEN_WARMUP_HOUR: u32 = 10;
-const OPEN_WARMUP_MIN: u32 = 0;
-
 /// 拆单检测：同向交易最大时间间隔（秒）
 const SPLIT_TIME_GAP: i64 = 3;
 /// 拆单检测：成交量偏差容忍比例
@@ -138,48 +134,6 @@ pub struct TransactionAnalysisResult {
 
 /// 检测连续同向、量近、时近的成交集群（疑似程序化拆单）。
 /// 返回检测到的集群数。
-fn detect_split_clusters(transactions: &[TransactionPoint]) -> i32 {
-    if transactions.len() < SPLIT_MIN_CLUSTER {
-        return 0;
-    }
-
-    let mut clusters = 0i32;
-    let mut run_len = 0usize;
-    let mut prev_flag = -1i32; // 非0/1的初始值
-    let mut prev_vol: i64 = 0;
-    let mut prev_secs: i64 = 0;
-
-    for t in transactions {
-        let secs = time_to_secs(t.time);
-
-        if t.bs_flag == prev_flag
-            && prev_flag >= 0
-            && (t.vol as f64 - prev_vol as f64).abs() <= prev_vol as f64 * SPLIT_VOL_TOLERANCE
-            && secs - prev_secs <= SPLIT_TIME_GAP
-            && secs > prev_secs
-        {
-            run_len += 1;
-        } else {
-            if run_len >= SPLIT_MIN_CLUSTER {
-                clusters += 1;
-            }
-            run_len = 1;
-        }
-
-        prev_flag = t.bs_flag;
-        prev_vol = t.vol;
-        prev_secs = secs;
-    }
-
-    // 末尾集群
-    if run_len >= SPLIT_MIN_CLUSTER {
-        clusters += 1;
-    }
-
-    clusters
-}
-
-/// 拆单检测 v2 — 正确处理中性盘，遇到 bs_flag>1 直接打断集群且不更新基准。
 fn detect_split_clusters_v2(transactions: &[TransactionPoint]) -> i32 {
     if transactions.len() < SPLIT_MIN_CLUSTER {
         return 0;
@@ -290,200 +244,6 @@ fn detect_matched_pairs(transactions: &[TransactionPoint]) -> i32 {
 
 /// 根据各项指标计算真假突破置信度。
 #[allow(clippy::too_many_arguments)]
-fn compute_breakout_score(
-    buy_vol_ratio: f64,
-    sell_vol_ratio: f64,
-    large_trade_vol_ratio: f64,
-    large_buy_vol_ratio: f64,
-    large_buy_count: i32,
-    large_sell_count: i32,
-    inst_buy_vol_ratio: f64,
-    inst_net_flow_ratio: f64,
-    split_clusters: i32,
-    matched_pairs: i32,
-    price_position: f64,
-    last_30min_buy_sell_ratio: f64,
-    last_30min_momentum: f64,
-    last_30min_vol_ratio: f64,
-    day_chg_pct: f64,
-    n: usize,
-) -> (f64, bool, String, String) {
-    let mut score = 0.0_f64;
-    let mut reasons: Vec<String> = Vec::new();
-    let mut concerns: Vec<String> = Vec::new();
-
-    // 1. 买卖力量评分 (权重 0.25)
-    let buy_sell_ratio = if sell_vol_ratio > 0.0 {
-        buy_vol_ratio / sell_vol_ratio
-    } else if buy_vol_ratio > 0.0 {
-        3.0 // 无卖出 = 极强
-    } else {
-        1.0
-    };
-    let buy_power_score = (buy_sell_ratio / 2.0).min(1.0); // buy/sell=2 即满分
-    score += buy_power_score * 0.25;
-
-    if buy_sell_ratio >= 1.5 {
-        reasons.push(format!("主动买/卖比={:.2}", buy_sell_ratio));
-    } else if buy_sell_ratio < 0.8 {
-        concerns.push(format!("卖压偏大(买/卖={:.2})", buy_sell_ratio));
-    }
-
-    // 2. 大单质量评分 (权重 0.20)
-    if large_trade_vol_ratio > 0.3 {
-        let large_quality = if large_buy_vol_ratio >= 0.6 {
-            reasons.push(format!(
-                "大单买入积极({:.0}%大单为买,买/卖={}/{})",
-                large_buy_vol_ratio * 100.0,
-                large_buy_count,
-                large_sell_count.max(1)
-            ));
-            1.0
-        } else if large_buy_vol_ratio <= 0.4 {
-            concerns.push(format!(
-                "大单以卖出为主(买/卖={}/{})",
-                large_buy_count, large_sell_count
-            ));
-            0.2
-        } else {
-            0.6
-        };
-        score += large_quality * 0.20;
-    } else if large_trade_vol_ratio > 0.15 {
-        score += 0.4 * 0.20;
-    } else {
-        concerns.push("大单不活跃".to_string());
-        score += 0.2 * 0.20;
-    }
-
-    // 3. 主力分析评分 (权重 0.15) — 基于trade_count过滤的真机构单
-    if inst_net_flow_ratio.abs() > 0.01 {
-        // 有可识别的主力活动
-        if inst_buy_vol_ratio >= 0.60 {
-            reasons.push(format!(
-                "主力买入积极(买比{:.0}%,净流{:.1}%)",
-                inst_buy_vol_ratio * 100.0,
-                inst_net_flow_ratio * 100.0
-            ));
-            score += 1.0 * 0.15;
-        } else if inst_buy_vol_ratio >= 0.55 {
-            reasons.push(format!("主力偏多(买比{:.0}%)", inst_buy_vol_ratio * 100.0));
-            score += 0.7 * 0.15;
-        } else if inst_buy_vol_ratio >= 0.45 {
-            score += 0.3 * 0.15; // 均衡
-        } else {
-            concerns.push(format!("主力卖出为主(买比{:.0}%)", inst_buy_vol_ratio * 100.0));
-            score += 0.0 * 0.15;
-        }
-    } else {
-        score += 0.2 * 0.15; // 无明显主力活动
-    }
-
-    // 4. 价格位置评分 (权重 0.15)
-    if price_position >= 0.8 {
-        reasons.push(format!("高位收盘({:.0}%分位)", price_position * 100.0));
-        score += 1.0 * 0.15;
-    } else if price_position >= 0.6 {
-        score += 0.7 * 0.15;
-    } else if price_position >= 0.4 {
-        score += 0.4 * 0.15;
-    } else {
-        concerns.push(format!("收盘位置偏低({:.0}%分位)", price_position * 100.0));
-        score += 0.1 * 0.15;
-    }
-
-    // 5. 尾盘趋势评分 (权重 0.15)
-    if last_30min_momentum > 0.02 {
-        reasons.push(format!("尾盘主动买入({:+.0}bp)", last_30min_momentum * 10000.0));
-        score += 1.0 * 0.15;
-    } else if last_30min_momentum > 0.005 {
-        score += 0.6 * 0.15;
-    } else if last_30min_momentum > -0.005 {
-        score += 0.3 * 0.15;
-    } else {
-        concerns.push(format!("尾盘主动卖出({:+.0}bp)", last_30min_momentum * 10000.0));
-        score += 0.0 * 0.15;
-    }
-
-    // 6. 尾盘量能 (权重 0.10)
-    if last_30min_vol_ratio > 0.25 {
-        if last_30min_buy_sell_ratio >= 1.2 {
-            reasons.push(format!("尾盘放量买入(占比{:.0}%)", last_30min_vol_ratio * 100.0));
-            score += 1.0 * 0.10;
-        } else {
-            concerns.push(format!("尾盘放量但买卖均衡"));
-            score += 0.3 * 0.10;
-        }
-    } else if last_30min_vol_ratio > 0.15 {
-        score += 0.5 * 0.10;
-    } else {
-        score += 0.2 * 0.10;
-    }
-
-    // ── 惩罚项 ──
-
-    // 当日涨幅过大 → 追高风险（放宽阈值，涨停附近才扣分）
-    if day_chg_pct > 12.0 {
-        concerns.push(format!("涨幅过大({:+.1}%)", day_chg_pct));
-        score *= 0.7;
-    } else if day_chg_pct > 9.5 {
-        concerns.push(format!("涨幅偏高({:+.1}%)", day_chg_pct));
-        score *= 0.85;
-    }
-
-    // 交易笔数过少 → 流动性不足
-    if n < 50 {
-        score *= 0.9;
-    }
-
-    // 拆单过多 → 程序化交易痕迹重，真实性存疑
-    if split_clusters >= 5 {
-        concerns.push(format!("拆单痕迹重({}集群)", split_clusters));
-        score *= 0.90;
-    } else if split_clusters >= 3 {
-        concerns.push(format!("存在拆单({}集群)", split_clusters));
-        score *= 0.95;
-    }
-
-    // 对倒过多 → 成交量造假嫌疑（按总笔数比例自适应，活跃股免于误判）
-    let mp_threshold_severe = ((n as f64) * 0.05).ceil().max(5.0) as i32;   // 5% 或至少 5 对
-    let mp_threshold_moderate = ((n as f64) * 0.025).ceil().max(3.0) as i32; // 2.5% 或至少 3 对
-    if matched_pairs >= mp_threshold_severe {
-        concerns.push(format!("对倒嫌疑({}对,占比{:.1}%)", matched_pairs, matched_pairs as f64 / n as f64 * 100.0));
-        score *= 0.85;
-    } else if matched_pairs >= mp_threshold_moderate {
-        concerns.push(format!("存在对倒({}对,占比{:.1}%)", matched_pairs, matched_pairs as f64 / n as f64 * 100.0));
-        score *= 0.92;
-    }
-
-    // ── 最终判断 ──
-    let confidence = score.clamp(0.0, 1.0);
-    let (is_breakout, conclusion) = if confidence >= 0.65 {
-        (true, "真突破".to_string())
-    } else if confidence >= 0.45 {
-        (true, "疑似突破".to_string())
-    } else if confidence >= 0.30 {
-        (false, "疑似假突破".to_string())
-    } else {
-        (false, "假突破".to_string())
-    };
-
-    let details = if !reasons.is_empty() {
-        reasons.join("; ")
-    } else {
-        "无明显信号特征".to_string()
-    };
-
-    let concerns_str = if !concerns.is_empty() {
-        format!("｜风险: {}", concerns.join("; "))
-    } else {
-        String::new()
-    };
-
-    let full_details = format!("{}{}", details, concerns_str);
-
-    (confidence, is_breakout, conclusion, full_details)
-}
 
 // ── 便捷函数 ──
 
@@ -605,7 +365,7 @@ pub fn analyze_breakout(
 }
 
 fn compute_breakout_quality(
-    breakout_n: usize, buy_ratio: f64, large_count: i32, large_buy: i32, large_sell: i32,
+    _breakout_n: usize, buy_ratio: f64, large_count: i32, large_buy: i32, large_sell: i32,
     sustain_ratio: f64, vol_ratio: f64,
 ) -> (f64, String, String) {
     let mut score = 0.0_f64; let mut strengths: Vec<String> = Vec::new(); let mut risks: Vec<String> = Vec::new();
