@@ -4,14 +4,11 @@
     from ak_rust import trans_analysis, generate_all_signals
 """
 
-from . import _native
 from .signaling import generate_all_signals
 
 from ._native import (
     tick_analysis,
     trans_analysis,
-    trans_analysis_v2,
-    trans_analysis_v4,
     trans_breakout,
     auction_scan,
     auction_false_sell,
@@ -24,8 +21,6 @@ from ._native import (
     wt_signal_batch,
     generate_ak_signals,
     ak_signal_list,
-    ak_init_builtins,
-    ak_register_signal,
 )
 
 __all__ = [k for k in dir() if not k.startswith("_")]

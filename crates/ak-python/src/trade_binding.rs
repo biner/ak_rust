@@ -1,10 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
-use ak_core::transaction::{
-    analyze_transactions as tx_v1, analyze_transactions_v2 as tx_v2,
-    analyze_transactions_v3 as tx_v3, analyze_transactions_v4 as tx_v4,
-    TransactionPoint,
-};
+use ak_core::transaction::{analyze_transactions, TransactionPoint};
 
 fn parse_txns(data: &Bound<'_, PyList>) -> PyResult<Vec<TransactionPoint>> {
     let mut txns: Vec<TransactionPoint> = Vec::with_capacity(data.len());
@@ -66,15 +62,9 @@ macro_rules! make_tx_name_fn {
     };
 }
 
-make_tx_name_fn!(trans_analysis, tx_v1, "trans_analysis");
-make_tx_name_fn!(trans_analysis_v2, tx_v2, "trans_analysis_v2");
-make_tx_name_fn!(trans_analysis_v3, tx_v3, "trans_analysis_v3");
-make_tx_name_fn!(trans_analysis_v4, tx_v4, "trans_analysis_v4");
+make_tx_name_fn!(trans_analysis, analyze_transactions, "trans_analysis");
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(trans_analysis, m)?)?;
-    m.add_function(wrap_pyfunction!(trans_analysis_v2, m)?)?;
-    m.add_function(wrap_pyfunction!(trans_analysis_v3, m)?)?;
-    m.add_function(wrap_pyfunction!(trans_analysis_v4, m)?)?;
     Ok(())
 }

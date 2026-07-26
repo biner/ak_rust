@@ -17,32 +17,6 @@
 use chrono::Timelike;
 use crate::auction::AuctionTick;
 
-/// 卖盘假压制检测权重 (V2.0，基于实盘经验校准)
-#[derive(Debug, Clone)]
-pub struct FalseSellWeights {
-    pub sell_ratio: f64,         // 卖盘时间占比 0.20
-    pub price_resilience: f64,   // 价格韧性 0.20
-    pub volume_surge: f64,       // 尾段放量 0.15
-    pub final_sell_wall: f64,    // 末笔大额卖压 0.10
-    pub total_sell_volume: f64,  // 累计卖盘总量 0.10
-    pub peak_late: f64,          // 最高价在后半段 0.10
-    pub sell_recovery: f64,      // 卖盘→买盘恢复速度 0.15
-}
-
-impl Default for FalseSellWeights {
-    fn default() -> Self {
-        Self {
-            sell_ratio: 0.20,
-            price_resilience: 0.20,
-            volume_surge: 0.15,
-            final_sell_wall: 0.10,
-            total_sell_volume: 0.10,
-            peak_late: 0.10,
-            sell_recovery: 0.15,
-        }
-    }
-}
-
 /// 卖盘假压制检测结果
 #[derive(Debug, Clone, PartialEq)]
 pub struct FalseSellResult {
@@ -71,19 +45,11 @@ pub struct FalseSellResult {
 #[derive(Debug, Clone)]
 pub struct FalseSellDetector {
     threshold: f64,
-    weights: FalseSellWeights,
 }
 
 impl FalseSellDetector {
     pub fn new(threshold: f64) -> Self {
-        Self {
-            threshold,
-            weights: FalseSellWeights::default(),
-        }
-    }
-
-    pub fn with_weights(threshold: f64, weights: FalseSellWeights) -> Self {
-        Self { threshold, weights }
+        Self { threshold }
     }
 
     /// 分析集合竞价数据，返回 T2 评分。
@@ -219,13 +185,13 @@ impl FalseSellDetector {
 
         // ── 综合评分 ──
         let mut s = 0.0;
-        s += sr_score * self.weights.sell_ratio;
-        s += pr_score * self.weights.price_resilience;
-        s += vs_score * self.weights.volume_surge;
-        s += fw_score * self.weights.final_sell_wall;
-        s += tv_score * self.weights.total_sell_volume;
-        s += pl_score * self.weights.peak_late;
-        s += recovery_score * self.weights.sell_recovery;
+        s += sr_score * 0.20;
+        s += pr_score * 0.20;
+        s += vs_score * 0.15;
+        s += fw_score * 0.10;
+        s += tv_score * 0.10;
+        s += pl_score * 0.10;
+        s += recovery_score * 0.15;
 
         // ── 惩罚 ──
         let price_change_pct =

@@ -3,9 +3,6 @@ use chrono::Timelike;
 use crate::auction::morphology;
 
 
-/// Convenience alias matching the Python original's class name.
-pub type Scanner = AuctionScanner;
-
 /// 集合竞价逐笔 tick。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AuctionTick {
@@ -64,38 +61,6 @@ pub struct ScanResult {
     pub morphology_tag: String,
 }
 
-/// 权重配置。
-#[derive(Debug, Clone)]
-pub struct Weights {
-    /// 阶梯拉升权重 (v2.1: 0.25)
-    pub step_up: f64,
-    /// 买卖交替权重 (v2.1: 0.10)
-    pub neg_pos_alternate: f64,
-    /// 买盘反超权重 (v2.1: 0.35)
-    pub buy_reversal: f64,
-    /// 尾段放量权重 (v2.1: 0.15)
-    pub volume_surge: f64,
-    /// 尾盘压盘权重 (v2.1: 0.15)
-    pub end_pressure: f64,
-    /// 最小竞价总成交额（元），低于此值扣流动性惩罚。
-    /// 默认 1000 万；高价股自动适应——总成交额 = Σ(price × matched × 100)。
-    pub min_auction_amount: f64,
-}
-
-impl Default for Weights {
-    fn default() -> Self {
-        // V2.1 校准权重（基于 12 只样本回测）
-        Self {
-            step_up: 0.25,              // 阶梯拉升 (不变)
-            neg_pos_alternate: 0.10,    // 买卖交替 (↓0.15→0.10)
-            buy_reversal: 0.35,         // 买盘反超 (↑0.30→0.35)
-            volume_surge: 0.15,         // 尾段放量 (↓0.20→0.15)
-            end_pressure: 0.15,         // 尾盘压盘 (↑0.10→0.15)
-            min_auction_amount: 10_000_000.0, // 1000 万
-        }
-    }
-}
-
 /// 从参数推导涨跌停价。
 fn resolve_limit_prices(
     limit_up: Option<f64>,
@@ -120,7 +85,6 @@ fn resolve_limit_prices(
 #[derive(Debug, Clone)]
 pub struct AuctionScanner {
     threshold: f64,
-    weights: Weights,
 }
 
 impl AuctionScanner {
@@ -128,15 +92,7 @@ impl AuctionScanner {
     ///
     /// * `threshold` — 匹配阈值（建议 0.50 严格 / 0.40 宽松）。
     pub fn new(threshold: f64) -> Self {
-        Self {
-            threshold,
-            weights: Weights::default(),
-        }
-    }
-
-    /// 使用自定义权重创建扫描器。
-    pub fn with_weights(threshold: f64, weights: Weights) -> Self {
-        Self { threshold, weights }
+        Self { threshold }
     }
 
     /// 分析集合竞价数据。
@@ -298,12 +254,12 @@ impl AuctionScanner {
 
         // ── 评分 ──────────────────────────────────────────────────────────────
         let mut score = 0.0_f64;
-        score += (real_eff_steps as f64 / 4.0).min(1.0) * self.weights.step_up;
-        score += if neg_pos_alt { 1.0 } else { 0.0 } * self.weights.neg_pos_alternate;
-        score += if buy_rev { 1.0 } else { 0.0 } * self.weights.buy_reversal;
-        score += (vr / 2.0).min(1.0) * self.weights.volume_surge;
+        score += (real_eff_steps as f64 / 4.0).min(1.0) * 0.25;
+        score += if neg_pos_alt { 1.0 } else { 0.0 } * 0.10;
+        score += if buy_rev { 1.0 } else { 0.0 } * 0.35;
+        score += (vr / 2.0).min(1.0) * 0.15;
         if end_p {
-            score += self.weights.end_pressure;
+            score += 0.15;
         }
 
         // ── 惩罚 ──────────────────────────────────────────────────────────────

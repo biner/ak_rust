@@ -142,7 +142,7 @@ fn signal_ak_ttm(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sig
 }
 
 fn signal_ak_wt_zone(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    use crate::wavetrend::{compute_wavetrend, compute_wt_zone_signal, classify_zone_v1, long_term_state_str};
+    use crate::wavetrend::{compute_wavetrend, compute_wt_zone_signal};
     let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
     let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(21);
     let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);

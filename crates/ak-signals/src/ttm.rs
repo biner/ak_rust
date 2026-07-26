@@ -110,7 +110,7 @@ fn classify_ttm_v2(ttm: &[f64], cur: usize) -> &'static str {
     "其他"
 }
 
-fn classify_ttm_sqz(sqz_on: &[bool], sqz_off: &[bool], cur: usize, prev: usize) -> &'static str {
+fn classify_ttm_sqz(sqz_on: &[bool], _sqz_off: &[bool], cur: usize, prev: usize) -> &'static str {
     if cur >= sqz_on.len() || prev >= sqz_on.len() { return "其他"; }
     let on_cur = sqz_on[cur];
     let on_prev = sqz_on[prev];

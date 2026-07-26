@@ -3,7 +3,7 @@ use pyo3::types::{PyAny, PyDict, PyList};
 use ak_core::auction::scan::AuctionTick;
 use ak_core::auction::false_sell::FalseSellDetector;
 
-const VERSION: &str = "2.0.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[pyfunction]
 fn false_sell_version() -> String { VERSION.to_string() }

@@ -9,7 +9,7 @@ mod wt_binding;
 mod signaling;
 
 #[pymodule]
-fn _native(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     tick_binding::register(m)?;
     trade_binding::register(m)?;
     breakout_binding::register(m)?;

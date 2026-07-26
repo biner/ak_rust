@@ -13,13 +13,13 @@
 """
 
 from . import _native
-from czsc import RawBar, Freq, generate_czsc_signals
+from czsc import RawBar, generate_czsc_signals
 import pandas as pd
 
 AK_SIGNALS = {"ak_wavetrend_V260625", "ak_wavetrend_zone_V250724", "ak_dmi_state_V250714", "ak_ic_state_V250718", "ak_ttm_squeeze_V250711"}
 
 
-def generate_all_signals(bars: list[RawBar], signals_config: list[dict], df: bool = True) -> pd.DataFrame:
+def generate_all_signals(bars: list[RawBar], signals_config: list[dict]) -> pd.DataFrame:
     """统一信号调度：ak_rust + czsc 混合。
     
     ak 信号走 ak_rust（WT），czsc 信号走 czsc（OBV/DMI/VOL 等）。

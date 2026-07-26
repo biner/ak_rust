@@ -17,27 +17,6 @@ def trans_analysis(
     low: float,
 ) -> dict[str, Any] | None: ...
 
-def trans_analysis_v2(
-    data: list[dict[str, Any]],
-    pre_close: float,
-    high: float,
-    low: float,
-) -> dict[str, Any] | None: ...
-
-def trans_analysis_v3(
-    data: list[dict[str, Any]],
-    pre_close: float,
-    high: float,
-    low: float,
-) -> dict[str, Any] | None: ...
-
-def trans_analysis_v4(
-    data: list[dict[str, Any]],
-    pre_close: float,
-    high: float,
-    low: float,
-) -> dict[str, Any] | None: ...
-
 # ── 突破时刻分析 ──
 def trans_breakout(
     data: list[dict[str, Any]],
@@ -98,6 +77,4 @@ def generate_ak_signals(
 
 def ak_signal_list() -> list[str]: ...
 
-def ak_init_builtins() -> None: ...
 
-def ak_register_signal(name: str, callback: Any) -> None: ...

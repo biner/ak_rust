@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 
-use ak_signals::{register_builtins, dispatch_signals, dispatch_one, list_signal_names, BarPoint, SignalConfig, SignalOutput};
+use ak_signals::{register_builtins, dispatch_signals, list_signal_names, BarPoint, SignalConfig};
 
 #[pyfunction]
 fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars: &Bound<'_, PyList>) -> PyResult<Py<PyAny>> {
@@ -64,25 +64,9 @@ fn ak_signal_list() -> Vec<String> {
     list_signal_names()
 }
 
-#[pyfunction]
-fn ak_register_signal(py: Python<'_>, name: String, callback: Bound<'_, PyAny>) {
-    // Python 回调转为 Rust closure（由 Python 侧直接调用更简单）
-    // 这里先用占位实现，后续可扩展
-}
-
-#[pyfunction]
-fn ak_init_builtins() -> Vec<String> {
-    register_builtins();
-    let names = list_signal_names();
-    eprintln!("[ak_python] init done, signals={:?}", names);
-    names
-}
-
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ak_signals::register_builtins();
     m.add_function(wrap_pyfunction!(generate_ak_signals, m)?)?;
     m.add_function(wrap_pyfunction!(ak_signal_list, m)?)?;
-    m.add_function(wrap_pyfunction!(ak_register_signal, m)?)?;
-    m.add_function(wrap_pyfunction!(ak_init_builtins, m)?)?;
     Ok(())
 }
