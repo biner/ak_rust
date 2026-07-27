@@ -1,9 +1,13 @@
 //! 信号调度框架
+//!
+//! 信号函数通过 `#[signal]` 宏标注，由 `inventory` 编译期自动收集。
+//! 运行时通过 `SIGNAL_REGISTRY` 查询并分派。
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use crate::wavetrend::{compute_wavetrend, get_wt_signal};
-use crate::{dmi, ic, ttm};
+use std::sync::LazyLock;
+use crate::types::AkSignalFn;
+use crate::{dmi, ic};
+use ak_signal_macros::signal;
 
 #[derive(Debug, Clone)]
 pub struct BarPoint {
@@ -31,36 +35,58 @@ pub struct SignalOutput {
     pub v1: String,
     pub v2: String,
     pub v3: String,
+    pub score: i32,
 }
 
-type SignalFn = Box<dyn Fn(&[BarPoint], &HashMap<String, String>) -> Vec<SignalOutput> + Send>;
+impl SignalOutput {
+    /// 构造默认输出（score=0）
+    pub fn new(name: &str, freq: &str, v1: &str, v2: &str, v3: &str) -> Self {
+        SignalOutput { name: name.into(), freq: freq.into(), v1: v1.into(), v2: v2.into(), v3: v3.into(), score: 0 }
+    }
 
-fn get_registry() -> std::sync::MutexGuard<'static, HashMap<String, SignalFn>> {
-    static REGISTRY: OnceLock<Mutex<HashMap<String, SignalFn>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap()
-}
-
-pub fn register_builtins() {
-    let mut r = get_registry();
-    r.insert("ak_wavetrend_V260625".into(), Box::new(signal_ak_wavetrend_v260625));
-    r.insert("ak_dmi_state_V260714".into(), Box::new(signal_ak_dmi));
-    r.insert("ak_ic_state_V260718".into(), Box::new(signal_ak_ic));
-    r.insert("ak_ttm_squeeze_V260711".into(), Box::new(signal_ak_ttm));
-    r.insert("ak_wavetrend_zone_V260724".into(), Box::new(signal_ak_wt_zone));
-}
-
-pub fn list_signal_names() -> Vec<String> {
-    get_registry().keys().cloned().collect()
-}
-
-pub fn dispatch_one(name: &str, bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    let r = get_registry();
-    match r.get(name) {
-        Some(f) => f(bars, params),
-        None => vec![SignalOutput { name: name.to_string(), freq: String::new(), v1: "未注册".into(), v2: "未注册".into(), v3: "未注册".into() }],
+    /// 带 score
+    pub fn with_score(name: &str, freq: &str, v1: &str, v2: &str, v3: &str, score: i32) -> Self {
+        SignalOutput { name: name.into(), freq: freq.into(), v1: v1.into(), v2: v2.into(), v3: v3.into(), score }
     }
 }
 
+/// 运行时注册表：由 `inventory` 收集的 `SignalDescriptor` 构建
+static SIGNAL_REGISTRY: LazyLock<HashMap<String, AkSignalFn>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    for d in inventory::iter::<crate::types::SignalDescriptor> {
+        m.insert(d.name.to_string(), d.func);
+    }
+    m
+});
+
+/// 注册内置信号（向后兼容）
+///
+/// 当前为 no-op：信号已通过 `#[signal]` + `inventory` 在编译期自动注册。
+pub fn register_builtins() {
+    let _ = &*SIGNAL_REGISTRY;
+}
+
+/// 查询信号是否已在 ak_rust 中注册
+pub fn has_signal(name: &str) -> bool {
+    SIGNAL_REGISTRY.contains_key(name)
+}
+
+pub fn list_signal_names() -> Vec<String> {
+    SIGNAL_REGISTRY.keys().cloned().collect()
+}
+
+/// 分派单个信号，返回每根 bar 的信号值（长度 = bars.len()）
+pub fn dispatch_one(name: &str, bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    match SIGNAL_REGISTRY.get(name) {
+        Some(f) => f(bars, params),
+        None => bars.iter().map(|_| SignalOutput {
+            name: name.to_string(), freq: String::new(),
+            v1: "未注册".into(), v2: "未注册".into(), v3: "未注册".into(), score: 0,
+        }).collect(),
+    }
+}
+
+/// 分派多个信号，返回扁平列表（每根 bar × 每个信号）
 pub fn dispatch_signals(configs: &[SignalConfig], bars: &[BarPoint]) -> Vec<SignalOutput> {
     let mut outputs = Vec::new();
     for config in configs {
@@ -73,40 +99,49 @@ pub fn dispatch_signals(configs: &[SignalConfig], bars: &[BarPoint]) -> Vec<Sign
     outputs
 }
 
-fn signal_ak_wavetrend_v260625(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
-    let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(21);
-    let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);
-    let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
-    let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
-    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
-    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
-    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    if close.len() < n1 + n2 + n3 + 5 {
-        return vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
-    }
-    let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
-    match get_wt_signal(&wt, di) {
-        Some(s) => vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: s.zone.into(), v2: s.direction.into(), v3: s.cross.into() }],
-        None => vec![SignalOutput { name: "ak_wavetrend_V260625".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }],
-    }
+// ── 信号函数 ───────────────────────────────────────────────
+
+#[signal(
+    category = "kline",
+    name = "ak_wavetrend_V260625",
+    template = "{freq}_D{di}WT#{n1}#{n2}#{n3}_V260625",
+    opcode = "AkWavetrend",
+    param_kind = "AkWavetrend"
+)]
+pub fn ak_wavetrend_v260625(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::wavetrend::compute_wt_signal(bars, params)
 }
 
-fn signal_ak_dmi(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+#[signal(
+    category = "kline",
+    name = "ak_dmi_state_V260714",
+    template = "{freq}_D{di}DMI#{n1}#{n2}_V260714",
+    opcode = "AkDmiState",
+    param_kind = "AkDmiState"
+)]
+pub fn ak_dmi_state_v260714(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
     let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(14);
     let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(6);
-    let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
     let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
+    let name = "ak_dmi_state_V260714";
     let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    match dmi::compute_dmi(&high, &low, &close, n1, n2, di) {
-        Some(s) => vec![SignalOutput { name: "ak_dmi_state_V260714".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-        None => vec![SignalOutput { name: "ak_dmi_state_V260714".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
-    }
+    let series = dmi::compute_dmi_series(&high, &low, &close, n1, n2);
+    series.iter().map(|s| match s {
+        Some(s) => SignalOutput::new(name, &freq, s.v1, s.v2, s.v3),
+        None => SignalOutput::new(name, &freq, "其他", "任意", "任意"),
+    }).collect()
 }
 
-fn signal_ak_ic(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+#[signal(
+    category = "kline",
+    name = "ak_ic_state_V260718",
+    template = "{freq}_D{di}IC#{n1}#{n2}#{n3}_V260718",
+    opcode = "AkIcState",
+    param_kind = "AkIcState"
+)]
+pub fn ak_ic_state_v260718(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
     let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(9);
     let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(26);
     let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(52);
@@ -116,64 +151,34 @@ fn signal_ak_ic(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<Sign
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
     match ic::compute_ic_state(&high, &low, &close, n1, n2, n3, di) {
-        Some(s) => vec![SignalOutput { name: "ak_ic_state_V260718".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-        None => vec![SignalOutput { name: "ak_ic_state_V260718".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
+        Some(s) => vec![SignalOutput::with_score("ak_ic_state_V260718", &freq, s.v1, s.v2, s.v3, s.score)],
+        None => vec![SignalOutput::new("ak_ic_state_V260718", &freq, "其他", "任意", "任意")],
     }
 }
 
-fn signal_ak_ttm(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
-    let n2 = params.get("n2").and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.5);
-    let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
-    let n4 = params.get("n4").and_then(|s| s.parse::<f64>().ok()).unwrap_or(2.0);
-    let n5 = params.get("n5").and_then(|s| s.parse::<usize>().ok()).unwrap_or(n1);
-    let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
-    let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
-    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
-    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
-    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    match ttm::compute_ttm(&high, &low, &close, n1, n2, n3, n4, n5) {
-        Some((ttm, sqz_on, sqz_off)) => match ttm::get_ttm_signal(&ttm, &sqz_on, &sqz_off, di) {
-            Some(s) => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: s.v1.into(), v2: s.v2.into(), v3: s.v3.into() }],
-            None => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
-        },
-        None => vec![SignalOutput { name: "ak_ttm_squeeze_V260711".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "任意".into() }],
-    }
+#[signal(
+    category = "kline",
+    name = "ak_ttm_squeeze_V260711",
+    template = "{freq}_D{di}TTM#{n1}#{n2}#{n3}#{n4}#{n5}#{n6}_V260711",
+    opcode = "AkTtmSqueeze",
+    param_kind = "AkTtmSqueeze"
+)]
+pub fn ak_ttm_squeeze_v260711(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::ttm::compute_ttm_signal(bars, params)
 }
 
-fn signal_ak_wt_zone(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    use crate::wavetrend::{compute_wavetrend, compute_wt_zone_signal};
-    let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
-    let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(21);
-    let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);
-    let di = params.get("di").and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
-    let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
-    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
-    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
-    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    if close.len() < n1 + n2 + n3 + 5 {
-        return vec![SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
-    }
-    let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
-    let len = wt.len();
-    if len < di + 1 {
-        return vec![SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq, v1: "其他".into(), v2: "任意".into(), v3: "其他".into() }];
-    }
-    // 遍历所有 bar，维护状态机
-    let mut prev_state = 0i32;
-    let mut last_output = SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq: freq.clone(), v1: "其他".into(), v2: "任意".into(), v3: "其他".into() };
-    for i in 1..len {
-        let (w1_c, w2_c, w1_p) = (wt[i].wt1, wt[i].wt2, wt[i-1].wt1);
-        if w1_c.is_nan() || w2_c.is_nan() || w1_p.is_nan() { continue; }
-        let (v1, v2, v3, new_state, _score) = compute_wt_zone_signal(w1_c, w2_c, w1_p, prev_state);
-        prev_state = new_state;
-        last_output = SignalOutput { name: "ak_wavetrend_zone_V260724".into(), freq: freq.clone(), v1: v1.into(), v2: v2.into(), v3: v3.into() };
-    }
-    vec![last_output]
+#[signal(
+    category = "kline",
+    name = "ak_wavetrend_zone_V260724",
+    template = "{freq}_D{di}WT#{n1}#{n2}#{n3}_V260724",
+    opcode = "AkWavetrendZone",
+    param_kind = "AkWavetrendZone"
+)]
+pub fn ak_wavetrend_zone_v260724(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::wavetrend::compute_wt_zone_signal_full(bars, params)
 }
+
 #[cfg(test)]
-
-/// ak_wavetrend_zone_V260724
 mod tests {
     use super::*;
 
@@ -188,31 +193,45 @@ mod tests {
 
     #[test]
     fn test_dispatch_wt() {
-        register_builtins();
         let bars = make_bars(100);
         let sigs = dispatch_one("ak_wavetrend_V260625", &bars, &HashMap::from([("n1".into(),"10".into()),("n2".into(),"21".into()),("n3".into(),"4".into())]));
-        assert_eq!(sigs.len(), 1);
-        assert!(["多头","多头强势","弱多","弱空","空头"].contains(&sigs[0].v1.as_str()));
+        assert_eq!(sigs.len(), bars.len(), "should return 1 per bar");
+        let last = sigs.last().unwrap();
+        let v1 = last.v1.as_str();
+        assert!(["极度超买","超买","偏多","弱多","弱空","偏空","超卖","极度超卖"].contains(&v1));
     }
 
     #[test]
     fn test_dispatch_dmi() {
-        register_builtins();
         let bars = make_bars(100);
         let sigs = dispatch_one("ak_dmi_state_V260714", &bars, &HashMap::from([("n1".into(),"14".into()),("n2".into(),"6".into())]));
-        assert_eq!(sigs.len(), 1);
-        println!("DMI v1={v1} v2={v2} v3={v3}", v1=sigs[0].v1, v2=sigs[0].v2, v3=sigs[0].v3);
-        assert!(["盘整","酝酿","趋势","强趋势","其他"].contains(&sigs[0].v1.as_str()));
+        assert_eq!(sigs.len(), bars.len());
+        let last = sigs.last().unwrap();
+        assert!(["盘整","酝酿","趋势","强趋势","其他"].contains(&last.v1.as_str()));
     }
 
     #[test]
     fn test_all_registered() {
-        register_builtins();
         let names = list_signal_names();
         assert!(names.contains(&"ak_wavetrend_V260625".into()));
         assert!(names.contains(&"ak_dmi_state_V260714".into()));
         assert!(names.contains(&"ak_ic_state_V260718".into()));
         assert!(names.contains(&"ak_ttm_squeeze_V260711".into()));
     }
-}
 
+    #[test]
+    fn test_has_signal() {
+        assert!(has_signal("ak_wavetrend_V260625"));
+        assert!(has_signal("ak_ttm_squeeze_V260711"));
+        assert!(!has_signal("nonexistent_V999999"));
+    }
+
+    #[test]
+    fn test_unregistered_falls_through() {
+        let bars = make_bars(50);
+        let sigs = dispatch_one("ak_ttm_squeeze_V250711", &bars, &HashMap::new());
+        assert_eq!(sigs.len(), bars.len());
+        assert!(sigs.last().is_some());
+        sigs.last().map(|s| assert_eq!(s.v1, "未注册"));
+    }
+}
