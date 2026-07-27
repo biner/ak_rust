@@ -127,10 +127,10 @@ pub fn ak_dmi_state_v260714(bars: &[BarPoint], params: &HashMap<String, String>)
     let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let series = dmi::compute_dmi_series(&high, &low, &close, n1, n2);
-    series.iter().map(|s| match s {
-        Some(s) => SignalOutput::new(name, &freq, s.v1, s.v2, s.v3),
-        None => SignalOutput::new(name, &freq, "其他", "任意", "任意"),
+    let series = dmi::compute_dmi_state(&high, &low, &close, n1, n2);
+    series.iter().map(|o| match o {
+        Some((v1, v2, v3)) => SignalOutput::new(name, &freq, v1, v2, v3),
+        None => SignalOutput::with_score(name, &freq, "其他", "任意", "任意", 0),
     }).collect()
 }
 
@@ -165,6 +165,39 @@ pub fn ak_ic_state_v260718(bars: &[BarPoint], params: &HashMap<String, String>) 
 )]
 pub fn ak_ttm_squeeze_v260711(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
     crate::ttm::compute_ttm_signal(bars, params)
+}
+
+#[signal(
+    category = "kline",
+    name = "ak_osc_state_V260720",
+    template = "{freq}_D{di}OSC#{n}#{m}_V260720",
+    opcode = "AkOscStateV260720",
+    param_kind = "AkOscState"
+)]
+pub fn ak_osc_state_v260720(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::osc::compute_osc_720(bars, params)
+}
+
+#[signal(
+    category = "kline",
+    name = "ak_osc_state_V260721",
+    template = "{freq}_D{di}OSC#{n}#{m}_V260721",
+    opcode = "AkOscStateV260721",
+    param_kind = "AkOscStateV260721"
+)]
+pub fn ak_osc_state_v260721(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::osc::compute_osc_721(bars, params)
+}
+
+#[signal(
+    category = "kline",
+    name = "ak_vol_ratio_V260721",
+    template = "{freq}_D{di}VOL#{n}_V260721",
+    opcode = "AkVolRatio",
+    param_kind = "AkVolRatio"
+)]
+pub fn ak_vol_ratio_v260721(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
+    crate::vol::compute_vol_ratio(bars, params)
 }
 
 #[signal(

@@ -18,6 +18,8 @@ fn czsc_short_name(name: &str) -> String {
         "dmi_state" => "DMI".to_string(),
         "ic_state" => "IC".to_string(),
         "ttm_squeeze" => "TTM".to_string(),
+        "osc_state" => "OSC".to_string(),
+        "vol_ratio" => "VOL".to_string(),
         _ => base.to_string(),
     }
 }
@@ -26,14 +28,20 @@ fn czsc_short_name(name: &str) -> String {
 fn ak_col_name(name: &str, freq: &str, params: &HashMap<String, String>) -> String {
     let short = czsc_short_name(name);
 
-    let n1 = params.get("n1").map(|s| s.as_str()).unwrap_or("");
-    let n2 = params.get("n2").map(|s| s.as_str()).unwrap_or("");
-    let n3 = params.get("n3").map(|s| s.as_str()).unwrap_or("");
-
+    // 收集 n1..n6 + n/m 等数字参数
     let mut param_parts: Vec<&str> = Vec::new();
-    for v in [n1, n2, n3] {
-        if !v.is_empty() {
-            param_parts.push(v);
+    for i in 1..=6 {
+        let key = format!("n{i}");
+        if let Some(v) = params.get(&key) {
+            param_parts.push(v.as_str());
+        }
+    }
+    // 如果没有 n1..n6，尝试 n/m（OSC/vol 信号用）
+    if param_parts.is_empty() {
+        for key in ["n", "m", "scale"] {
+            if let Some(v) = params.get(key) {
+                param_parts.push(v.as_str());
+            }
         }
     }
     let params_str = param_parts.join("#");
@@ -191,8 +199,11 @@ fn generate_all_signals(
         return Ok(czsc_result.into_any().unbind());
     }
 
-    // 4. 计算 ak_rust 信号（用全量 bars 计算信号，尾部截取对齐 CZSC 行数）
+    // 4. 计算 ak_rust 信号（注入 init_n 给状态机信号用）
     let bar_vec = parse_bars(bars)?;
+    for cfg in &mut ak_configs {
+        cfg.params.insert("_init_n".into(), init_n.to_string());
+    }
     let ak_results = dispatch_signals(&ak_configs, &bar_vec);
 
     // 5. 合并结果：将 ak_rust 列追加到 czsc 结果
@@ -211,7 +222,7 @@ fn generate_all_signals(
         pandas.call_method1("DataFrame", (records,))?
     } else if df {
         // 已经是 DataFrame
-        czsc_result.into_any().downcast_into::<PyAny>()?
+        czsc_result.into_any().cast_into::<PyAny>()?
     } else {
         // czsc 返回了 list[dict]，转 DataFrame（追加列后再决定是否转回 list）
         pandas.call_method1("DataFrame", (czsc_result,))?

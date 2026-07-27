@@ -116,7 +116,7 @@ pub fn compute_long_term_state(prev_state: i32, wt1_prev: f64, wt1_cur: f64) -> 
 pub fn compute_wt_zone_signal(
     wt1_cur: f64, wt2_cur: f64, wt1_prev: f64, prev_state: i32,
 ) -> (&'static str, &'static str, &'static str, i32, i32) {
-    let v1 = classify_zone_v1(wt1_cur);
+    let v1 = classify_wt_zone(wt1_cur);
     let state = compute_long_term_state(prev_state, wt1_prev, wt1_cur);
     let v2 = match state { 1 => "长期看多", -1 => "长期看空", _ => "其他" };
     let v3 = if wt1_cur > wt2_cur { "多头" } else { "空头" };
@@ -179,25 +179,30 @@ pub fn compute_wt_zone_signal_full(bars: &[BarPoint], params: &HashMap<String, S
     let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
     let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(21);
     let n3 = params.get("n3").and_then(|s| s.parse::<usize>().ok()).unwrap_or(4);
+    let init_n = params.get("_init_n").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+    let min_bars = n1 + n2 + n3 + 5;
     let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
     let name = "ak_wavetrend_zone_V260724";
     let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
     let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
     let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    if close.len() < n1 + n2 + n3 + 5 { return fill_one_missing(close.len()); }
+    if close.len() < min_bars { return fill_one_missing(close.len()); }
     let wt = compute_wavetrend(&high, &low, &close, n1, n2, n3);
-    let mut prev_state = 0i32;
+
+    // CZSC 在 init_n 处重置状态机：state 从 0 开始，bar init_n 是第 1 根输出
+    let start = init_n.max(1);
+    let mut st = 0i32;
     let mut out = Vec::with_capacity(close.len());
-    // bar 0: 没前根，直接 missing
-    out.push(SignalOutput::new(name, &freq, "其他", "任意", "其他"));
-    for i in 1..close.len() {
-        let (w1_c, w2_c, w1_p) = (wt[i].wt1, wt[i].wt2, wt[i-1].wt1);
-        if w1_c.is_nan() || w2_c.is_nan() || w1_p.is_nan() {
-            out.push(SignalOutput::new(name, &freq, "其他", "任意", "其他"));
+    for _i in 0..start {
+        out.push(SignalOutput::with_score(name, &freq, "其他", "任意", "任意", 1));
+    }
+    for i in start..close.len() {
+        if wt[i].wt1.is_nan() || wt[i].wt2.is_nan() || wt[i-1].wt1.is_nan() {
+            out.push(SignalOutput::with_score(name, &freq, "其他", "任意", "任意", 1));
             continue;
         }
-        let (v1, v2, v3, new_state, score) = compute_wt_zone_signal(w1_c, w2_c, w1_p, prev_state);
-        prev_state = new_state;
+        let (v1, v2, v3, new_state, score) = compute_wt_zone_signal(wt[i].wt1, wt[i].wt2, wt[i-1].wt1, st);
+        st = new_state;
         out.push(SignalOutput::with_score(name, &freq, v1, v2, v3, score));
     }
     out
