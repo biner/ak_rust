@@ -191,7 +191,7 @@ fn generate_all_signals(
         return Ok(czsc_result.into_any().unbind());
     }
 
-    // 4. 计算 ak_rust 信号
+    // 4. 计算 ak_rust 信号（用全量 bars 计算信号，尾部截取对齐 CZSC 行数）
     let bar_vec = parse_bars(bars)?;
     let ak_results = dispatch_signals(&ak_configs, &bar_vec);
 
@@ -200,7 +200,7 @@ fn generate_all_signals(
 
     // czsc_result 可能是 DataFrame 或 list[dict]
     let sdf = if czsc_indices.is_empty() {
-        // czsc 没有处理任何信号，从 bar_vec（已解析）创建基础 DataFrame
+        // czsc 没有处理任何信号，从 bar_vec 创建基础 DataFrame
         let records = PyList::empty(py);
         for bar in &bar_vec {
             let rec = PyDict::new(py);
@@ -217,13 +217,15 @@ fn generate_all_signals(
         pandas.call_method1("DataFrame", (czsc_result,))?
     };
 
-    // 6. 追加 ak_rust 列（逐 bar 信号值）
+    // 6. 追加 ak_rust 列（尾部截取对齐 czsc 行数）
     if !ak_configs.is_empty() {
+        let nrows = sdf.call_method0("__len__")?.extract::<usize>()?;
         let nbars = ak_results.len() / ak_configs.len();
+        let offset = nbars.saturating_sub(nrows);
         for (cfg_idx, cfg) in ak_configs.iter().enumerate() {
             let col_name = ak_col_name(&cfg.name, &cfg.freq, &cfg.params);
-            let start = cfg_idx * nbars;
-            let end = start + nbars;
+            let start = cfg_idx * nbars + offset;
+            let end = start + nrows;
             let values: Vec<String> = ak_results[start..end]
                 .iter()
                 .map(|r| format!("{}_{}_{}_{}", r.v1, r.v2, r.v3, r.score))
