@@ -587,9 +587,10 @@ fn compute_breakout_score_v4(
     n: usize,
     has_big_auction: bool, // V4 新增参数
 ) -> (f64, bool, String, String) {
-    let mut score = 0.0_f64;
     let mut reasons: Vec<String> = Vec::new();
     let mut concerns: Vec<String> = Vec::new();
+
+    // ── 逐维评分（先算各维度子分，再条件组合） ──
 
     // 1. 买卖力量评分 (权重 0.25) —— 与 V3 保持一致
     let buy_sell_ratio = if sell_vol_ratio > 0.0 {
@@ -600,7 +601,6 @@ fn compute_breakout_score_v4(
         1.0
     };
     let buy_power_score = (buy_sell_ratio / 2.0).min(1.0);
-    score += buy_power_score * 0.25;
 
     if buy_sell_ratio >= 1.5 {
         reasons.push(format!("主动买/卖比={:.2}", buy_sell_ratio));
@@ -608,9 +608,9 @@ fn compute_breakout_score_v4(
         concerns.push(format!("卖压偏大(买/卖={:.2})", buy_sell_ratio));
     }
 
-    // 2. 大单质量评分 (权重 0.20) —— 分母已由调用方保证为“主动大单”
-    if large_trade_vol_ratio > 0.3 {
-        let large_quality = if large_buy_vol_ratio >= 0.6 {
+    // 2. 大单质量评分 (权重 0.20) —— 分母已由调用方保证为"主动大单"
+    let large_quality = if large_trade_vol_ratio > 0.3 {
+        if large_buy_vol_ratio >= 0.6 {
             reasons.push(format!(
                 "大单买入积极({:.0}%大单为买,买/卖={}/{})",
                 large_buy_vol_ratio * 100.0,
@@ -626,87 +626,107 @@ fn compute_breakout_score_v4(
             0.2
         } else {
             0.6
-        };
-        score += large_quality * 0.20;
+        }
     } else if large_trade_vol_ratio > 0.15 {
-        score += 0.4 * 0.20;
+        0.4
     } else {
         concerns.push("大单不活跃".to_string());
-        score += 0.2 * 0.20;
-    }
+        0.2
+    };
 
     // 3. 主力分析评分 (权重 0.15) —— 与 V3 一致，但调用方已使用 V4 主力识别逻辑
-    if inst_net_flow_ratio.abs() > 0.01 {
+    let inst_score = if inst_net_flow_ratio.abs() > 0.01 {
         if inst_buy_vol_ratio >= 0.60 {
             reasons.push(format!(
                 "主力买入积极(买比{:.0}%,净流{:.1}%)",
                 inst_buy_vol_ratio * 100.0,
                 inst_net_flow_ratio * 100.0
             ));
-            score += 1.0 * 0.15;
+            1.0
         } else if inst_buy_vol_ratio >= 0.55 {
             reasons.push(format!("主力偏多(买比{:.0}%)", inst_buy_vol_ratio * 100.0));
-            score += 0.7 * 0.15;
+            0.7
         } else if inst_buy_vol_ratio >= 0.45 {
-            score += 0.3 * 0.15;
+            0.3
         } else {
             concerns.push(format!("主力卖出为主(买比{:.0}%)", inst_buy_vol_ratio * 100.0));
-            score += 0.0 * 0.15;
+            0.0
         }
     } else {
-        score += 0.2 * 0.15;
-    }
+        0.2
+    };
 
     // 4. 价格位置评分 (权重 0.15) —— 不变
-    if price_position >= 0.8 {
+    let price_score = if price_position >= 0.8 {
         reasons.push(format!("高位收盘({:.0}%分位)", price_position * 100.0));
-        score += 1.0 * 0.15;
+        1.0
     } else if price_position >= 0.6 {
-        score += 0.7 * 0.15;
+        0.7
     } else if price_position >= 0.4 {
-        score += 0.4 * 0.15;
+        0.4
     } else {
         concerns.push(format!("收盘位置偏低({:.0}%分位)", price_position * 100.0));
-        score += 0.1 * 0.15;
-    }
+        0.1
+    };
 
     // 5. 尾盘趋势评分 (权重 0.15) —— 【V4 改进点 1】阈值从 0.02 降至 0.01
-    if last_30min_momentum > V4_LAST30_MOMENTUM_FULL_SCORE {
+    let momentum_score = if last_30min_momentum > V4_LAST30_MOMENTUM_FULL_SCORE {
         reasons.push(format!("尾盘主动买入({:+.0}bp)", last_30min_momentum * 10000.0));
-        score += 1.0 * 0.15;
+        1.0
     } else if last_30min_momentum > 0.005 {
-        score += 0.6 * 0.15;
+        0.6
     } else if last_30min_momentum > -0.005 {
-        score += 0.3 * 0.15;
+        0.3
     } else {
         concerns.push(format!("尾盘主动卖出({:+.0}bp)", last_30min_momentum * 10000.0));
-        score += 0.0 * 0.15;
-    }
+        0.0
+    };
 
-    // 6. 尾盘量能 (权重 0.10) —— 不变
-    if last_30min_vol_ratio > 0.25 {
+    // 6. 尾盘量能评分 (权重 0.10) —— 不变
+    let vol_score = if last_30min_vol_ratio > 0.25 {
         if last_30min_buy_sell_ratio >= 1.2 {
             reasons.push(format!("尾盘放量买入(占比{:.0}%)", last_30min_vol_ratio * 100.0));
-            score += 1.0 * 0.10;
+            1.0
         } else {
             concerns.push("尾盘放量但买卖均衡".to_string());
-            score += 0.3 * 0.10;
+            0.3
         }
     } else if last_30min_vol_ratio > 0.15 {
-        score += 0.5 * 0.10;
+        0.5
     } else {
-        score += 0.2 * 0.10;
+        0.2
+    };
+
+    // ── 【V4 改进点 5】涨停保护：封涨停时买卖力量/尾盘失真，跳过这些维度 ──
+    let is_limit_up_protected = day_chg_pct > 9.5 && price_position > 0.95;
+    let (mut score, used_weight) = if is_limit_up_protected {
+        reasons.push("涨停保护(跳过买卖力量/尾盘)".to_string());
+        // 涨停时只依赖：大单质量(0.20) + 主力分析(0.15) + 价格位置(0.15) = 0.50
+        let s = large_quality * 0.20 + inst_score * 0.15 + price_score * 0.15;
+        (s, 0.50)
+    } else {
+        let s = buy_power_score * 0.25 + large_quality * 0.20 + inst_score * 0.15
+              + price_score * 0.15 + momentum_score * 0.15 + vol_score * 0.10;
+        (s, 1.00)
+    };
+    score = if used_weight > 0.0 { score / used_weight } else { 0.0 };
+
+    if is_limit_up_protected {
+        reasons.push("涨停加分(+0.05)".to_string());
+        score += 0.05;
     }
 
     // ── V4 惩罚项（动态阈值，适应大盘股） ──
 
-    // 涨幅惩罚（放宽至 12% 才重扣）
-    if day_chg_pct > 12.0 {
-        concerns.push(format!("涨幅过大({:+.1}%)", day_chg_pct));
-        score *= 0.7;
-    } else if day_chg_pct > 9.5 {
-        concerns.push(format!("涨幅偏高({:+.1}%)", day_chg_pct));
-        score *= 0.85;
+    // 涨幅惩罚（涨停保护下跳过双重惩罚）
+    if !is_limit_up_protected {
+        if day_chg_pct > 12.0 {
+            concerns.push(format!("涨幅过大({:+.1}%)", day_chg_pct));
+            score *= 0.7;
+        } else if day_chg_pct > 9.5 {
+            concerns.push(format!("涨幅偏高({:+.1}%)", day_chg_pct));
+            score *= 0.85;
+        }
     }
 
     // 笔数过少惩罚
