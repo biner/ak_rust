@@ -13,7 +13,7 @@ pub mod types;
 pub mod osc;
 pub mod vol;
 
-pub use wavetrend::{compute_wavetrend, get_wt_signal, classify_wt_zone, classify_zone_v1, compute_long_term_state, compute_wt_zone_signal, WtPoint, WtSignal};
+pub use wavetrend::{compute_wavetrend, get_wt_signal, classify_wt_zone, compute_long_term_state, compute_wt_zone_signal, WtPoint, WtSignal};
 pub use ic::IcSignal;
 pub use ttm::TtmSignal;
 pub use signals::{register_builtins, dispatch_signals, dispatch_one, list_signal_names, has_signal, BarPoint, SignalConfig, SignalOutput};

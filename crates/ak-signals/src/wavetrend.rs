@@ -65,16 +65,6 @@ pub fn classify_wt_zone(wt1: f64) -> &'static str {
     else { "极度超卖" }
 }
 
-/// v1 分类（Zone 版 6 级）
-pub fn classify_zone_v1(wt1: f64) -> &'static str {
-    if wt1 > 60.0 { "极度超买" }
-    else if wt1 > 53.0 { "超买" }
-    else if wt1 > 0.0 { "中性0轴上" }
-    else if wt1 > -53.0 { "中性0轴下" }
-    else if wt1 > -60.0 { "超卖" }
-    else { "极度超卖" }
-}
-
 pub struct WtSignal {
     pub zone: &'static str,
     pub direction: &'static str,

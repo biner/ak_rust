@@ -142,7 +142,6 @@ pub fn analyze_tick_chart(
 
     // ── 时段分析 ──
     let am_end = AM_END_IDX.min(n);
-    let _pm_start = AM_END_IDX.min(n);
     let total_minutes = n;
 
     let (am_avg_price, pm_avg_price) = if am_end > 0 && n > am_end {

@@ -10,6 +10,7 @@ from ._native import (
     tick_analysis,
     trans_analysis,
     trans_breakout,
+    screening_metrics,
     auction_scan,
     auction_false_sell,
     auction_scanner_version,

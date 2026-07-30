@@ -1,6 +1,3 @@
-use crate::{BarPoint, SignalOutput};
-use std::collections::HashMap;
-
 fn classify(adx: f64, plus_di: f64, minus_di: f64, prev_adx: f64) -> (&'static str, &'static str, &'static str) {
     let v1 = if adx < 20.0 { "盘整" }
         else if adx < 25.0 { "酝酿" }
@@ -64,20 +61,5 @@ pub fn compute_dmi_state(high: &[f64], low: &[f64], close: &[f64], dmi_period: u
             let pa = if lb > 0 { adx[i - lb] } else { f64::NAN };
             Some(classify(adx[i], plus_di[i], minus_di[i], pa))
         }
-    }).collect()
-}
-
-pub fn compute_dmi_signal(bars: &[BarPoint], params: &HashMap<String, String>) -> Vec<SignalOutput> {
-    let n1 = params.get("n1").and_then(|s| s.parse::<usize>().ok()).unwrap_or(14);
-    let n2 = params.get("n2").and_then(|s| s.parse::<usize>().ok()).unwrap_or(6);
-    let freq = bars.first().map(|b| b.freq.clone()).unwrap_or_default();
-    let name = "ak_dmi_state_V260714";
-    let high: Vec<f64> = bars.iter().map(|b| b.high).collect();
-    let low: Vec<f64> = bars.iter().map(|b| b.low).collect();
-    let close: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let r = compute_dmi_state(&high, &low, &close, n1, n2);
-    r.iter().map(|o| match o {
-        Some((v1, v2, v3)) => SignalOutput::new(name, &freq, v1, v2, v3),
-        None => SignalOutput::with_score(name, &freq, "其他", "任意", "任意", 0),
     }).collect()
 }
