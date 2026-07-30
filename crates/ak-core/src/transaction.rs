@@ -1042,6 +1042,10 @@ pub struct ScreeningMetrics {
     pub large_pct: f64,
     /// 超大单率(≥5000股)占总量 %
     pub xl_pct: f64,
+    /// 大单金额率(≥50万元)成交量占比 %
+    pub large_amount_pct: f64,
+    /// 超大单金额率(≥200万元)成交量占比 %
+    pub xl_amount_pct: f64,
     /// 平均每笔成交量(股)
     pub avg_trade_vol: f64,
     /// 量加权均价 VWAP
@@ -1078,11 +1082,17 @@ pub fn compute_screening_metrics(txns: &[ScreeningTxPoint]) -> Option<ScreeningM
     let mut large_vol: i64 = 0;   // ≥1000股
     let mut xl_vol: i64 = 0;      // ≥5000股
 
+    // 大单金额量
+    let mut large_amount_vol: i64 = 0;  // ≥50万元
+    let mut xl_amount_vol: i64 = 0;     // ≥200万元
+
     // 单笔大单量
     let mut single_trade_vol: i64 = 0;  // trade_count == 1
 
     let large_threshold: i64 = 1000;
     let xl_threshold: i64 = 5000;
+    let large_amount_threshold: f64 = 20_000.0;    // 2万元
+    let xl_amount_threshold: f64 = 100_000.0;     // 10万元
 
     for t in txns {
         let h = t.time.hour();
@@ -1110,12 +1120,21 @@ pub fn compute_screening_metrics(txns: &[ScreeningTxPoint]) -> Option<ScreeningM
             last5_vol += v;
         }
 
-        // 大单统计
+        // 大单统计（按股数）
         if v >= large_threshold {
             large_vol += v;
         }
         if v >= xl_threshold {
             xl_vol += v;
+        }
+
+        // 大单统计（按成交金额）
+        let amount = t.price * v as f64;
+        if amount >= large_amount_threshold {
+            large_amount_vol += v;
+        }
+        if amount >= xl_amount_threshold {
+            xl_amount_vol += v;
         }
 
         // 单笔大单（一笔成交不拆单）
@@ -1148,6 +1167,8 @@ pub fn compute_screening_metrics(txns: &[ScreeningTxPoint]) -> Option<ScreeningM
         last5_vol_pct: to_pct(last5_vol),
         large_pct: to_pct(large_vol),
         xl_pct: to_pct(xl_vol),
+        large_amount_pct: to_pct(large_amount_vol),
+        xl_amount_pct: to_pct(xl_amount_vol),
         avg_trade_vol: ((total_f / n as f64) * 100.0).round() / 100.0,
         vwap: ((total_vol_price / total_f) * 100.0).round() / 100.0,
         avg_shares_per_trade: avg_shares,

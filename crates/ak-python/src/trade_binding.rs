@@ -78,6 +78,8 @@ fn screening_to_dict(py: Python<'_>, r: ScreeningMetrics) -> Py<PyAny> {
     d.set_item("last5_vol_pct", r.last5_vol_pct).unwrap();
     d.set_item("large_pct", r.large_pct).unwrap();
     d.set_item("xl_pct", r.xl_pct).unwrap();
+    d.set_item("large_amount_pct", r.large_amount_pct).unwrap();
+    d.set_item("xl_amount_pct", r.xl_amount_pct).unwrap();
     d.set_item("avg_trade_vol", r.avg_trade_vol).unwrap();
     d.set_item("vwap", r.vwap).unwrap();
     d.set_item("avg_shares_per_trade", r.avg_shares_per_trade).unwrap();
