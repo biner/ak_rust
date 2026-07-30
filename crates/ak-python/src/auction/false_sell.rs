@@ -9,11 +9,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn false_sell_version() -> String { VERSION.to_string() }
 
 #[pyfunction(name = "auction_false_sell")]
-#[pyo3(signature = (data, threshold=0.5))]
+#[pyo3(signature = (data, threshold=50))]
 fn analyze_false_sell(
     py: Python<'_>,
     data: &Bound<'_, PyList>,
-    threshold: f64,
+    threshold: i32,
 ) -> PyResult<Py<PyAny>> {
     let mut ticks: Vec<AuctionTick> = Vec::with_capacity(data.len());
     for item in data.iter() {

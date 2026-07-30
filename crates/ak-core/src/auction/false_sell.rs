@@ -20,8 +20,8 @@ use crate::auction::AuctionTick;
 /// 卖盘假压制检测结果
 #[derive(Debug, Clone, PartialEq)]
 pub struct FalseSellResult {
-    /// 综合 T2 得分 [0, 1]
-    pub score: f64,
+    /// 综合 T2 得分 [0, 100] 百分制
+    pub score: i32,
     /// score >= threshold
     pub match_: bool,
     // ── 原始因子 ──
@@ -50,7 +50,8 @@ pub trait FalseSellAnalyzer {
 /// 卖盘假压制检测器 (T2 模式)
 #[derive(Debug, Clone)]
 pub struct FalseSellDetector {
-    threshold: f64,
+    /// 百分制阈值 [0, 100]
+    threshold: i32,
 }
 
 impl FalseSellAnalyzer for FalseSellDetector {
@@ -60,7 +61,8 @@ impl FalseSellAnalyzer for FalseSellDetector {
 }
 
 impl FalseSellDetector {
-    pub fn new(threshold: f64) -> Self {
+    /// `threshold`: 百分制阈值 [0, 100]，默认 50
+    pub fn new(threshold: i32) -> Self {
         Self { threshold }
     }
 
@@ -224,6 +226,8 @@ impl FalseSellDetector {
         }
         s = s.min(1.0);
 
+        let score = (s * 100.0).round() as i32;
+
         // ── 辅助指标 ──
         let pos_total: i64 = ums.iter().filter(|&&u| u > 0).map(|&u| u as i64).sum();
         let net_um = pos_total - neg_total;
@@ -236,8 +240,8 @@ impl FalseSellDetector {
             matches.iter().filter(|&&m| m >= 1000).count() as f64 / n as f64;
 
         Some(FalseSellResult {
-            score: (s * 1000.0).round() / 1000.0,
-            match_: s >= self.threshold,
+            score,
+            match_: score >= self.threshold,
             neg_ratio: (neg_ratio * 1000.0).round() / 1000.0,
             price_up,
             vr: (vr * 100.0).round() / 100.0,

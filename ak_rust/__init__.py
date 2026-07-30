@@ -92,7 +92,7 @@ def screening_metrics(
 
 def auction_scan(
     data: list[dict],
-    threshold: float = 0.5,
+    threshold: int = 50,
     open_price: Optional[float] = None,
     pre_close: Optional[float] = None,
     limit_up: Optional[float] = None,
@@ -110,7 +110,7 @@ def auction_scan(
 
 def auction_false_sell(
     data: list[dict],
-    threshold: float = 0.5,
+    threshold: int = 50,
 ) -> FalseSellResult:
     """虚假卖出检测（T2 模式）。
 

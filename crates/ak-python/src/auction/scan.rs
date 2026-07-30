@@ -13,11 +13,11 @@ fn auction_morphology_names() -> Vec<&'static str> {
 }
 
 #[pyfunction(name = "auction_scan")]
-#[pyo3(signature = (data, threshold=0.5, open_price=None, pre_close=None, limit_up=None, limit_down=None))]
+#[pyo3(signature = (data, threshold=50, open_price=None, pre_close=None, limit_up=None, limit_down=None))]
 fn analyze_auction(
     py: Python<'_>,
     data: &Bound<'_, PyList>,
-    threshold: f64,
+    threshold: i32,
     open_price: Option<f64>,
     pre_close: Option<f64>,
     limit_up: Option<f64>,

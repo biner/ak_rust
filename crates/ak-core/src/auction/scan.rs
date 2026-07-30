@@ -34,8 +34,8 @@ pub struct AuctionTick {
 /// 集合竞价扫描结果。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScanResult {
-    /// 综合得分 [0, 1]
-    pub score: f64,
+    /// 综合得分 [0, 100] 百分制
+    pub score: i32,
     /// 是否匹配（score >= threshold）
     pub match_: bool,
     /// 原始阶梯数（去重后的价格层级数 - 1）
@@ -64,10 +64,10 @@ pub struct ScanResult {
     pub last_um: i32,
     /// 竞价形态分类名称
     pub morphology: String,
-    /// 形态置信度 [0, 1]
-    pub morphology_conf: f64,
-    /// 7 种形态各自的得分
-    pub morphology_scores: [f64; 7],
+    /// 形态置信度 [0, 100] 百分制
+    pub morphology_conf: i32,
+    /// 7 种形态各自的得分 [0, 100]
+    pub morphology_scores: [i32; 7],
     /// 形态编码 (0-6, 对应 MORPHOLOGY_NAMES 索引)
     pub morphology_code: usize,
     /// 形态分组的组名 (A/B/YZ/ZD)
@@ -99,7 +99,7 @@ fn resolve_limit_prices(
 /// 使用 `Scanner::new(threshold)` 构造，调用 `analyze()` 执行分析。
 #[derive(Debug, Clone)]
 pub struct AuctionScanner {
-    threshold: f64,
+    threshold: i32,
 }
 
 impl AuctionAnalyzer for AuctionScanner {
@@ -118,8 +118,8 @@ impl AuctionAnalyzer for AuctionScanner {
 impl AuctionScanner {
     /// 创建扫描器。
     ///
-    /// * `threshold` — 匹配阈值（建议 0.50 严格 / 0.40 宽松）。
-    pub fn new(threshold: f64) -> Self {
+    /// * `threshold` — 匹配阈值，百分制 [0, 100]（建议 50 严格 / 40 宽松）。
+    pub fn new(threshold: i32) -> Self {
         Self { threshold }
     }
 
@@ -322,8 +322,8 @@ impl AuctionScanner {
             morphology::classify_morphology(&recs, lu_used, ld_used);
 
         Some(ScanResult {
-            score: (score.min(1.0) * 1000.0).round() / 1000.0,
-            match_: score >= self.threshold,
+            score: (score.min(1.0) * 100.0).round() as i32,
+            match_: (score * 100.0).round() as i32 >= self.threshold,
             steps: valid_steps,
             eff_steps: effective_steps,
             neg_pos_alt,

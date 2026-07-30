@@ -82,7 +82,7 @@ class BreakoutResult:
 @dataclass
 class ScanResult:
     """集合竞价分析结果。"""
-    score: float = 0.0
+    score: int = 0
     match: bool = False
     steps: int = 0
     eff_steps: int = 0
@@ -97,8 +97,8 @@ class ScanResult:
     last_p: float = 0.0
     last_um: int = 0
     morphology: str = ""
-    morphology_conf: float = 0.0
-    morphology_scores: list[float] = field(default_factory=lambda: [0.0] * 7)
+    morphology_conf: int = 0
+    morphology_scores: list[int] = field(default_factory=lambda: [0] * 7)
     morphology_code: int = 0
     morphology_group: str = ""
     morphology_tag: str = ""
@@ -107,7 +107,7 @@ class ScanResult:
 @dataclass
 class FalseSellResult:
     """虚假卖出检测结果（T2 模式）。"""
-    score: float = 0.0
+    score: int = 0
     match: bool = False
     neg_ratio: float = 0.0
     price_up: bool = False

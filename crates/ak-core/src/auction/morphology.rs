@@ -16,12 +16,13 @@ pub const MORPHOLOGY_NAMES: [&str; 7] = [
 ];
 
 /// 对 tick 序列进行七种竞价形态分类。
+/// 返回 (形态名称, 最佳得分 [0,100] 百分制, 7 种形态得分 [0,100], 最佳形态索引)
 pub fn classify_morphology(
     recs: &[AuctionTick],
     limit_up: f64,
     limit_down: f64,
-) -> (String, f64, [f64; 7], usize) {
-    let scores = [
+) -> (String, i32, [i32; 7], usize) {
+    let raw: [f64; 7] = [
         m1_limit_up_test(recs, limit_up),
         m2_step_climbing(recs),
         m3_fishing_line(recs),
@@ -30,16 +31,17 @@ pub fn classify_morphology(
         m6_low_volume_flat(recs),
         m7_oscillation(recs),
     ];
+    let scores = raw.map(|v| (v * 100.0).round() as i32);
 
     let best_idx = scores
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .max_by(|(_, a), (_, b)| a.cmp(b))
         .map(|(i, _)| i)
         .unwrap_or(6);
 
     let best_score = scores[best_idx];
-    let (best_idx, mut name, conf) = if best_score < 0.2 {
+    let (best_idx, mut name, conf) = if best_score < 20 {
         (6usize, MORPHOLOGY_NAMES[6].to_string(), scores[6])
     } else {
         (best_idx, MORPHOLOGY_NAMES[best_idx].to_string(), best_score)
