@@ -16,8 +16,6 @@ ak_rust/
 ├── ak_rust/                    # Python 包
 │   ├── __init__.py             # 导出所有顶层 API
 │   ├── signaling.py            # 信号统一调度层 (ak_rust + czsc 混合)
-│   ├── ttm_v20.py              # TTM v2.0 策略（回测入口）
-│   ├── ttm_v21.py              # TTM v2.1 策略（回测入口）
 │   ├── py.typed                # PEP 561 类型标记
 │   ├── _native.abi3.so         # 编译好的原生扩展
 │   └── _native/
