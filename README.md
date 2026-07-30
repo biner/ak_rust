@@ -1,6 +1,7 @@
 # ak_rust
 
-**A 股量化分析工具箱** — 基于 Rust 实现的高性能逐笔成交、集合竞价、技术指标信号分析库。提供 Python 原生调用接口（通过 PyO3 / maturin 编译为原生扩展模块）。
+**A 股量化分析工具箱** — 基于 Rust 实现的高性能分时图、逐笔成交、集合竞价分析及技术指标信号库。
+通过 PyO3 / maturin 编译为 Python 原生扩展，返回类型安全的 dataclass，所有评分统一使用百分制 `[0, 100]`。
 
 ---
 
@@ -11,10 +12,10 @@ ak_rust/
 ├── Cargo.toml                  # Rust workspace 根
 ├── pyproject.toml              # Python 构建配置 (maturin)
 ├── LICENSE                     # Apache-2.0
-├── README.md
 │
 ├── ak_rust/                    # Python 包
-│   ├── __init__.py             # 导出所有顶层 API
+│   ├── __init__.py             # 类型化 API（返回 dataclass）
+│   ├── models.py               # 6 个 dataclass 类型定义
 │   ├── signaling.py            # 信号统一调度层 (ak_rust + czsc 混合)
 │   ├── py.typed                # PEP 561 类型标记
 │   ├── _native.abi3.so         # 编译好的原生扩展
@@ -24,22 +25,32 @@ ak_rust/
 └── crates/
     ├── ak-core/                # 核心分析算法
     │   ├── src/
-    │   │   ├── lib.rs          # 模块导出
+    │   │   ├── lib.rs          # 模块导出 + Analyzer trait re-export
     │   │   ├── ta.rs           # 基础技术分析算子 (EMA/SMA)
-    │   │   ├── tick.rs         # 分时图量价质量分析
-    │   │   ├── transaction.rs  # 逐笔成交分析 (v4)、突破检测、筛选指标
-    │   │   └── auction/
+    │   │   ├── tick/           # 分时图量价分析（目录模块）
+    │   │   │   ├── mod.rs
+    │   │   │   ├── types.rs    # TickPoint, TickChartResult
+    │   │   │   ├── analyzer.rs # TickAnalyzer trait + DefaultTickAnalyzer
+    │   │   │   └── core.rs     # analyze_tick_chart, calc_close_pos
+    │   │   ├── transaction/    # 逐笔成交分析（目录模块）
+    │   │   │   ├── mod.rs
+    │   │   │   ├── types.rs    # TransactionPoint, BreakoutResult, ScreeningMetrics
+    │   │   │   ├── analyzer.rs # TxAnalyzer trait + DefaultTxAnalyzer
+    │   │   │   ├── breakout.rs # BreakoutAnalyzer trait + DefaultBreakoutAnalyzer
+    │   │   │   ├── core.rs     # analyze_transactions (v4), analyze_breakout
+    │   │   │   └── screening.rs# compute_screening_metrics
+    │   │   └── auction/        # 集合竞价分析
     │   │       ├── mod.rs
-    │   │       ├── scan.rs         # 集合竞价扫描评分
-    │   │       ├── false_sell.rs   # 虚假卖出检测
-    │   │       └── morphology.rs   # 七种竞价形态分类
+    │   │       ├── scan.rs     # 竞价扫描评分 + AuctionAnalyzer trait
+    │   │       ├── false_sell.rs# 虚假卖出检测 + FalseSellAnalyzer trait
+    │   │       └── morphology.rs# 七种竞价形态分类
     │   └── Cargo.toml
     │
     ├── ak-signals/             # 技术指标信号库
     │   ├── src/
     │   │   ├── lib.rs          # 模块导出 + inventory 注册
     │   │   ├── types.rs        # 信号描述符类型
-    │   │   ├── signals.rs      # 信号调度框架 + 信号函数定义
+    │   │   ├── signals.rs      # 信号调度框架 + 8 个 #[signal] 函数
     │   │   ├── wavetrend.rs    # WaveTrend 通道信号
     │   │   ├── dmi.rs          # DMI 趋势状态信号
     │   │   ├── ic.rs           # Ichimoku Cloud 云图信号
@@ -52,22 +63,27 @@ ak_rust/
     │   └── src/lib.rs          # #[signal] 属性宏
     │
     └── ak-python/              # Python 绑定层 (PyO3)
-        ├── src/
-        │   ├── lib.rs             # PyModule 入口
-        │   ├── tick_binding.rs    # 分时图绑定
-        │   ├── trade_binding.rs   # 逐笔成交 + 筛选指标绑定
-        │   ├── breakout_binding.rs# 突破检测绑定
-        │   ├── auction_binding.rs # 竞价扫描 + 形态绑定
-        │   ├── false_sell_binding.rs
-        │   ├── wt_binding.rs      # WaveTrend 绑定
-        │   ├── signaling.rs       # 信号调度绑定
-        │   └── generate_all.rs    # 混合信号总调度 (ak_rust + czsc)
-        └── Cargo.toml
+        └── src/
+            ├── lib.rs          # PyModule 入口
+            ├── tick/mod.rs     # tick_analysis 绑定
+            ├── transaction/
+            │   ├── mod.rs
+            │   ├── analyzer.rs # trans_analysis 绑定
+            │   ├── breakout.rs # trans_breakout 绑定
+            │   └── screening.rs# screening_metrics 绑定
+            ├── auction/
+            │   ├── mod.rs
+            │   ├── scan.rs     # auction_scan 绑定
+            │   └── false_sell.rs# auction_false_sell 绑定
+            ├── dispatch.rs     # generate_ak_signals, ak_signal_list
+            └── generate_all.rs # 混合信号总调度 (ak_rust + czsc)
 ```
 
 ---
 
 ## 核心功能
+
+> 所有评分统一为百分制 `int [0, 100]`，与 ak-signals 的 `score: i32` 对齐，便于跨模块比较。
 
 ### 1. 分时图分析 (`tick_analysis`)
 
@@ -334,30 +350,10 @@ ticks = [
     {"time": "09:15:00", "price": 10.0, "matched": 100, "unmatched": 50},
     {"time": "09:20:00", "price": 10.2, "matched": 200, "unmatched": -30},
 ]
-result = auction_scan(ticks, threshold=0.5, pre_close=9.80)
+result = auction_scan(ticks, threshold=50, pre_close=9.80)
 
 # 虚假卖出检测
-result = auction_false_sell(ticks, threshold=0.5)
-```
-
-### WaveTrend 信号
-
-```python
-from ak_rust import compute_wavetrend, wt_signal, wt_classify_zone, wt_signal_batch
-
-high = [101.0, 102.0, 103.0, ...]
-low  = [99.0,  100.0, 101.0, ...]
-close = [100.0, 101.0, 102.0, ...]
-
-# 计算 WaveTrend 原始值
-wt = compute_wavetrend(high, low, close, n1=10, n2=21, n3=4)
-
-# 单根 bar 信号
-signal = wt_signal(high, low, close, di=1, n1=10, n2=21, n3=4)
-# signal = {"zone": "偏多", "direction": "增大", "cross": "金叉"}
-
-# 批量信号
-batch = wt_signal_batch(high, low, close, n1=10, n2=21, n3=4)
+result = auction_false_sell(ticks, threshold=50)
 ```
 
 ### 信号统一调度
@@ -390,6 +386,24 @@ from ak_rust import generate_ak_signals, ak_signal_list
 print(ak_signal_list())  # 列出所有已注册信号
 
 results = generate_ak_signals(signals_config, bars)
+```
+
+### 类型化的返回结果
+
+所有分析函数返回类型安全的 dataclass，字段名与 Rust 侧一致，IDE 自动补全：
+
+```python
+from ak_rust import tick_analysis, auction_scan
+
+result = tick_analysis(ticks, pre_close=9.80)
+# result: TickChartResult | None
+if result:
+    print(f"评分: {result.quality_score}, 撤单: {result.should_cancel}")
+
+scan = auction_scan(ticks, threshold=50)
+# scan: ScanResult | None
+if scan:
+    print(f"竞价分: {scan.score}, 形态: {scan.morphology} (置信度 {scan.morphology_conf})")
 ```
 
 ---
