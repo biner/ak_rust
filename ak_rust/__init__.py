@@ -26,10 +26,6 @@ from ._native import (
     auction_scanner_version,
     auction_morphology_names,
     false_sell_version,
-    compute_wavetrend,
-    wt_classify_zone,
-    wt_signal,
-    wt_signal_batch,
     generate_ak_signals,
     ak_signal_list,
 )
@@ -135,10 +131,6 @@ __all__ = [
     "auction_scan",
     "auction_false_sell",
     # 直接透传的信号函数
-    "compute_wavetrend",
-    "wt_classify_zone",
-    "wt_signal",
-    "wt_signal_batch",
     "generate_ak_signals",
     "ak_signal_list",
     "generate_all_signals",
