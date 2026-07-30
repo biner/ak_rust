@@ -6,11 +6,9 @@ use ak_signals::{register_builtins, dispatch_signals, list_signal_names, BarPoin
 
 #[pyfunction]
 fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars: &Bound<'_, PyList>) -> PyResult<Py<PyAny>> {
-    // 确保信号已注册
     ak_signals::register_builtins();
     let sig_count = ak_signals::list_signal_names().len();
     eprintln!("[ak_python] dispatch: registry has {} signals", sig_count);
-    // 解析 bars
     let mut bar_vec: Vec<BarPoint> = Vec::with_capacity(bars.len());
     for item in bars.iter() {
         let d = item.cast::<PyDict>()?;
@@ -26,7 +24,6 @@ fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars:
         });
     }
 
-    // 解析 signals_config
     let mut configs: Vec<SignalConfig> = Vec::with_capacity(signals_config.len());
     for item in signals_config.iter() {
         let d = item.cast::<PyDict>()?;
@@ -38,7 +35,6 @@ fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars:
                 params = py_params;
             }
         }
-        // 兼容顶层参数（用户把 n1/n2/n3/di 直接放在 dict 顶层而非 params 子字典）
         if params.is_empty() {
             for (key, val) in d.iter() {
                 let k: String = key.extract::<String>().unwrap_or_default();
@@ -54,7 +50,6 @@ fn generate_ak_signals(py: Python<'_>, signals_config: &Bound<'_, PyList>, bars:
 
     let results = dispatch_signals(&configs, &bar_vec);
 
-    // 构造 DataFrame 等价的 list[dict]
     let py_list = PyList::empty(py);
     for sig in &results {
         let d = PyDict::new(py);

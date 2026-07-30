@@ -2,6 +2,21 @@
 use chrono::Timelike;
 use crate::auction::morphology;
 
+// ── Trait 定义 ──
+
+/// 集合竞价分析器 trait。
+pub trait AuctionAnalyzer {
+    /// 分析集合竞价数据，返回综合评分和形态分类。
+    fn analyze(
+        &self,
+        data: &[AuctionTick],
+        open_price: Option<f64>,
+        pre_close: Option<f64>,
+        limit_up: Option<f64>,
+        limit_down: Option<f64>,
+    ) -> Option<ScanResult>;
+}
+
 
 /// 集合竞价逐笔 tick。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -85,6 +100,19 @@ fn resolve_limit_prices(
 #[derive(Debug, Clone)]
 pub struct AuctionScanner {
     threshold: f64,
+}
+
+impl AuctionAnalyzer for AuctionScanner {
+    fn analyze(
+        &self,
+        data: &[AuctionTick],
+        open_price: Option<f64>,
+        pre_close: Option<f64>,
+        limit_up: Option<f64>,
+        limit_down: Option<f64>,
+    ) -> Option<ScanResult> {
+        self.analyze_filter(data, open_price, pre_close, limit_up, limit_down, true)
+    }
 }
 
 impl AuctionScanner {

@@ -30,7 +30,7 @@ fn analyze_false_sell(
     }
 
     let detector = FalseSellDetector::new(threshold);
-    match detector.analyze(&ticks) {
+    match detector.analyze_inner(&ticks) {
         None => Ok(py.None()),
         Some(r) => {
             let d = PyDict::new(py);

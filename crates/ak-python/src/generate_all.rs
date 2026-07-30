@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use ak_signals::{dispatch_signals, register_builtins, has_signal, BarPoint, SignalConfig};
 
-/// czsc 列名中的短名映射
 fn czsc_short_name(name: &str) -> String {
     let base = name
         .strip_prefix("ak_")
@@ -24,11 +23,8 @@ fn czsc_short_name(name: &str) -> String {
     }
 }
 
-/// 为 ak_rust 信号构造 czsc 风格的列名: {freq}_D1{short}#{params}_{label}
 fn ak_col_name(name: &str, freq: &str, params: &HashMap<String, String>) -> String {
     let short = czsc_short_name(name);
-
-    // 收集 n1..n6 + n/m 等数字参数
     let mut param_parts: Vec<&str> = Vec::new();
     for i in 1..=6 {
         let key = format!("n{i}");
@@ -36,7 +32,6 @@ fn ak_col_name(name: &str, freq: &str, params: &HashMap<String, String>) -> Stri
             param_parts.push(v.as_str());
         }
     }
-    // 如果没有 n1..n6，尝试 n/m（OSC/vol 信号用）
     if param_parts.is_empty() {
         for key in ["n", "m", "scale"] {
             if let Some(v) = params.get(key) {
@@ -45,7 +40,6 @@ fn ak_col_name(name: &str, freq: &str, params: &HashMap<String, String>) -> Stri
         }
     }
     let params_str = param_parts.join("#");
-
     let version = name.split("_V").nth(1).unwrap_or(name);
     let is_zone = name.contains("zone");
     let label = if is_zone {
@@ -53,15 +47,12 @@ fn ak_col_name(name: &str, freq: &str, params: &HashMap<String, String>) -> Stri
     } else {
         format!("V{}", version)
     };
-
     format!("{}_D1{}#{}_{}", freq, short, params_str, label)
 }
 
-/// 将 Python bar 列表解析为 Vec<BarPoint>（支持 RawBar 对象和 dict 两种格式）
 fn parse_bars(bars: &Bound<'_, PyList>) -> PyResult<Vec<BarPoint>> {
     let mut bar_vec: Vec<BarPoint> = Vec::with_capacity(bars.len());
     for item in bars.iter() {
-        // 先试 dict 格式
         if let Ok(d) = item.cast::<PyDict>() {
             bar_vec.push(BarPoint {
                 dt: d.get_item("dt").unwrap_or(None).and_then(|v| v.extract::<String>().ok()).unwrap_or_default(),
@@ -74,7 +65,6 @@ fn parse_bars(bars: &Bound<'_, PyList>) -> PyResult<Vec<BarPoint>> {
                 freq: d.get_item("freq").unwrap_or(None).and_then(|v| v.extract::<String>().ok()).unwrap_or_default(),
             });
         } else {
-            // RawBar 对象：通过 getattr 提取字段
             let bar = &item;
             bar_vec.push(BarPoint {
                 dt: bar.getattr("dt").ok().and_then(|v| v.extract::<String>().ok()).unwrap_or_default(),
@@ -91,10 +81,7 @@ fn parse_bars(bars: &Bound<'_, PyList>) -> PyResult<Vec<BarPoint>> {
     Ok(bar_vec)
 }
 
-/// 从 Python dict 解析信号配置项
-fn parse_config(
-    item: &Bound<'_, PyAny>,
-) -> PyResult<SignalConfig> {
+fn parse_config(item: &Bound<'_, PyAny>) -> PyResult<SignalConfig> {
     let d = item.cast::<PyDict>()?;
     let name: String = d
         .get_item("name")?
@@ -111,12 +98,10 @@ fn parse_config(
             params = py_params;
         }
     }
-    // 兼容顶层参数
     if params.is_empty() {
         for (key, val) in d.iter() {
             let k: String = key.extract::<String>().unwrap_or_default();
             if k != "name" && k != "freq" && k != "params" {
-                // 值可能是 str/int/float，统一转字符串
                 let v_str = if let Ok(s) = val.extract::<String>() {
                     s
                 } else if let Ok(n) = val.extract::<i64>() {
@@ -133,14 +118,6 @@ fn parse_config(
     Ok(SignalConfig { name, freq, params })
 }
 
-/// 批量生成信号：ak_rust 负责自身信号，其余委托 czsc 处理。
-///
-/// 参数:
-///   bars: 基础周期 K 线列表（dict 格式，需含 dt/open/high/low/close/vol/amount/freq）
-///   signals_config: 信号配置列表
-///   sdt: 信号开始计算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
-///   init_n: 预热 K 线数量
-///   df: 是否返回 DataFrame（默认 False 返回 list[dict]）
 #[pyfunction]
 #[pyo3(signature = (bars, signals_config, sdt="20170101", init_n=500, df=false))]
 fn generate_all_signals(
@@ -155,10 +132,8 @@ fn generate_all_signals(
         return Err(pyo3::exceptions::PyValueError::new_err("bars 不能为空"));
     }
 
-    // 注册 ak_rust 信号
     register_builtins();
 
-    // 1. 拆分信号配置：ak_rust 信号 vs czsc 信号
     let mut ak_indices: Vec<usize> = Vec::new();
     let mut czsc_indices: Vec<usize> = Vec::new();
     let mut ak_configs: Vec<SignalConfig> = Vec::new();
@@ -179,39 +154,31 @@ fn generate_all_signals(
         }
     }
 
-    // 2. 构造 czsc 子配置列表
     let czsc_cfg = PyList::empty(py);
     for &i in &czsc_indices {
         let item = signals_config.get_item(i)?;
         czsc_cfg.append(item)?;
     }
 
-    // 3. 调用 czsc 处理非 ak 信号
-    //    bars 类型：dict 列表（Python 层已转 RawBar）
     let czsc_mod = py.import("czsc")?;
     let czsc_result = czsc_mod.call_method1(
         "generate_czsc_signals",
         (bars, czsc_cfg, sdt, init_n, df),
     )?;
 
-    // 如果只有 czsc 信号，直接返回 czsc 结果
     if ak_indices.is_empty() {
         return Ok(czsc_result.into_any().unbind());
     }
 
-    // 4. 计算 ak_rust 信号（注入 init_n 给状态机信号用）
     let bar_vec = parse_bars(bars)?;
     for cfg in &mut ak_configs {
         cfg.params.insert("_init_n".into(), init_n.to_string());
     }
     let ak_results = dispatch_signals(&ak_configs, &bar_vec);
 
-    // 5. 合并结果：将 ak_rust 列追加到 czsc 结果
     let pandas = py.import("pandas")?;
 
-    // czsc_result 可能是 DataFrame 或 list[dict]
     let sdf = if czsc_indices.is_empty() {
-        // czsc 没有处理任何信号，从 bar_vec 创建基础 DataFrame
         let records = PyList::empty(py);
         for bar in &bar_vec {
             let rec = PyDict::new(py);
@@ -221,14 +188,11 @@ fn generate_all_signals(
         }
         pandas.call_method1("DataFrame", (records,))?
     } else if df {
-        // 已经是 DataFrame
         czsc_result.into_any().cast_into::<PyAny>()?
     } else {
-        // czsc 返回了 list[dict]，转 DataFrame（追加列后再决定是否转回 list）
         pandas.call_method1("DataFrame", (czsc_result,))?
     };
 
-    // 6. 追加 ak_rust 列（尾部截取对齐 czsc 行数）
     if !ak_configs.is_empty() {
         let nrows = sdf.call_method0("__len__")?.extract::<usize>()?;
         let nbars = ak_results.len() / ak_configs.len();
@@ -246,11 +210,9 @@ fn generate_all_signals(
         }
     }
 
-    // 7. 返回
     if df {
         Ok(sdf.into_any().unbind())
     } else {
-        // 转回 list[dict]
         let records = sdf.call_method0("to_dict")?;
         let records = records.call_method1("orient", ("records",))?;
         Ok(records.into_any().unbind())

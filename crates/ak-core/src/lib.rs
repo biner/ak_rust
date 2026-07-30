@@ -3,12 +3,13 @@ pub mod transaction;
 pub mod auction;
 pub mod ta;
 
-pub use tick::{analyze_tick_chart, TickChartResult, TickPoint};
+pub use tick::{analyze_tick_chart, TickChartResult, TickPoint, TickAnalyzer, DefaultTickAnalyzer};
 pub use transaction::{
     analyze_transactions,
     analyze_breakout, BreakoutResult,
     calc_buy_sell_ratio, TransactionAnalysisResult, TransactionPoint,
     ScreeningTxPoint, ScreeningMetrics, compute_screening_metrics,
+    TxAnalyzer, DefaultTxAnalyzer, BreakoutAnalyzer, DefaultBreakoutAnalyzer,
 };
-pub use auction::{AuctionTick, AuctionScanner, ScanResult,
-    FalseSellDetector, FalseSellResult, MORPHOLOGY_NAMES};
+pub use auction::{AuctionTick, AuctionScanner, ScanResult, AuctionAnalyzer,
+    FalseSellDetector, FalseSellResult, FalseSellAnalyzer, MORPHOLOGY_NAMES};

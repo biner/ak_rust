@@ -41,10 +41,22 @@ pub struct FalseSellResult {
     pub big_order_ratio: f64,
 }
 
+/// 卖盘假压制检测器 trait。
+pub trait FalseSellAnalyzer {
+    /// 分析集合竞价数据，检测是否存在虚假卖出（压单后撤单）行为。
+    fn analyze(&self, data: &[AuctionTick]) -> Option<FalseSellResult>;
+}
+
 /// 卖盘假压制检测器 (T2 模式)
 #[derive(Debug, Clone)]
 pub struct FalseSellDetector {
     threshold: f64,
+}
+
+impl FalseSellAnalyzer for FalseSellDetector {
+    fn analyze(&self, data: &[AuctionTick]) -> Option<FalseSellResult> {
+        self.analyze_inner(data)
+    }
 }
 
 impl FalseSellDetector {
@@ -54,7 +66,8 @@ impl FalseSellDetector {
 
     /// 分析集合竞价数据，返回 T2 评分。
     /// 仅处理 09:15-09:25 时段内的 tick。
-    pub fn analyze(&self, data: &[AuctionTick]) -> Option<FalseSellResult> {
+    /// 注：通过 `FalseSellAnalyzer` trait 调用 `analyze`，此方法改名避免冲突。
+    pub fn analyze_inner(&self, data: &[AuctionTick]) -> Option<FalseSellResult> {
         if data.len() < 15 {
             return None;
         }

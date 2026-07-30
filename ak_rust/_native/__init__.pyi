@@ -36,7 +36,7 @@ def auction_scan(
 def auction_false_sell(
     data: list[dict[str, Any]],
     threshold: float = 0.5,
-) -> dict[str, Any]: ...
+) -> dict[str, Any] | None: ...
 
 def auction_scanner_version() -> str: ...
 
@@ -44,9 +44,16 @@ def auction_morphology_names() -> list[str]: ...
 
 def false_sell_version() -> str: ...
 
+# ── 筛选指标 ──
+def screening_metrics(
+    data: list[dict[str, Any]],
+) -> dict[str, Any] | None: ...
+
 # ── WaveTrend 信号 ──
 def compute_wavetrend(
-    prices: list[float],
+    high: list[float],
+    low: list[float],
+    close: list[float],
     n1: int = 10,
     n2: int = 21,
     n3: int = 4,
@@ -55,7 +62,9 @@ def compute_wavetrend(
 def wt_classify_zone(wt1: float) -> str: ...
 
 def wt_signal(
-    prices: list[float],
+    high: list[float],
+    low: list[float],
+    close: list[float],
     di: int = 1,
     n1: int = 10,
     n2: int = 21,
@@ -63,7 +72,9 @@ def wt_signal(
 ) -> dict[str, str]: ...
 
 def wt_signal_batch(
-    prices: list[float],
+    high: list[float],
+    low: list[float],
+    close: list[float],
     n1: int = 10,
     n2: int = 21,
     n3: int = 4,
@@ -77,4 +88,11 @@ def generate_ak_signals(
 
 def ak_signal_list() -> list[str]: ...
 
-
+# ── 信号统一调度（混合 ak_rust + czsc）──
+def generate_all_signals(
+    bars: list[Any],
+    signals_config: list[dict[str, Any]],
+    sdt: str = "20170101",
+    init_n: int = 500,
+    df: bool = True,
+) -> Any: ...
