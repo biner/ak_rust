@@ -157,3 +157,4 @@ scripts/auto-czsc-quant/results/
 .agent_context/
 .claude/skills/
 ak_rust/ttm_v20.py
+.omo/
