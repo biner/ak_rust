@@ -122,16 +122,17 @@ mod tests {
     fn test_screening_normal() {
         let mut txns = Vec::new();
         for i in 0..10 {
-            txns.push(ScreeningTxPoint { time: t(9, 30 + i, 0), price: 10.0, vol: 1000 });
+            // 首笔为大单（vol=10000 超过均量3倍），保证 large_pct > 0
+            txns.push(ScreeningTxPoint { time: t(9, 30 + i, 0), price: 10.0, vol: if i == 0 { 10000 } else { 1000 }, trade_count: 1 });
         }
         for i in 0..5 {
-            txns.push(ScreeningTxPoint { time: t(10, 30 + i, 0), price: 10.0, vol: 2000 });
+            txns.push(ScreeningTxPoint { time: t(10, 30 + i, 0), price: 10.0, vol: 2000, trade_count: 1 });
         }
         for i in 0..5 {
-            txns.push(ScreeningTxPoint { time: t(13, i, 0), price: 10.0, vol: 1500 });
+            txns.push(ScreeningTxPoint { time: t(13, i, 0), price: 10.0, vol: 1500, trade_count: 1 });
         }
         for i in 0..5 {
-            txns.push(ScreeningTxPoint { time: t(14, 30 + i, 0), price: 10.5, vol: 3000 });
+            txns.push(ScreeningTxPoint { time: t(14, 30 + i, 0), price: 10.5, vol: 3000, trade_count: 1 });
         }
         let r = compute_screening_metrics(&txns).unwrap();
         assert!(r.first30_vol_pct > 20.0);
@@ -142,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_screening_too_few() {
-        let txns = vec![ScreeningTxPoint { time: t(9, 30, 0), price: 10.0, vol: 100 }];
+        let txns = vec![ScreeningTxPoint { time: t(9, 30, 0), price: 10.0, vol: 100, trade_count: 1 }];
         assert!(compute_screening_metrics(&txns).is_none());
     }
 }

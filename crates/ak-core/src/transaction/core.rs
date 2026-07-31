@@ -363,12 +363,12 @@ fn compute_breakout_score_v4(
         score += 0.10;
     }
 
-    let confidence = score.clamp(0.0, 1.0);
-    let (is_breakout, conclusion) = if confidence >= 0.65 {
+    let confidence = score.clamp(0.0, 1.0) * 100.0;
+    let (is_breakout, conclusion) = if confidence >= 65.0 {
         (true, "真突破".to_string())
-    } else if confidence >= 0.45 {
+    } else if confidence >= 45.0 {
         (true, "疑似突破".to_string())
-    } else if confidence >= 0.30 {
+    } else if confidence >= 30.0 {
         (false, "疑似假突破".to_string())
     } else {
         (false, "假突破".to_string())
@@ -645,7 +645,7 @@ pub fn analyze_breakout(
         breakout_vol_ratio, breakout_buy_ratio,
         breakout_large_buy, breakout_large_sell,
         price_sustain_ratio,
-        is_strong: confidence >= 0.6,
+        is_strong: confidence >= 60.0,
         classification, confidence, details,
     })
 }
@@ -656,7 +656,7 @@ fn compute_breakout_quality(
     breakout_large_buy: usize,
     breakout_large_sell: usize,
 ) -> (f64, String, String) {
-    let mut score = 0.0;
+    let mut score: f64 = 0.0;
     let mut details = Vec::new();
 
     if breakout_vol_ratio > 0.3 {
@@ -694,7 +694,7 @@ fn compute_breakout_quality(
         details.join("; ")
     };
 
-    (score, classification, format!("{}。{}", conclusion, details_str))
+    (score.clamp(0.0, 1.0) * 100.0, classification, format!("{}。{}", conclusion, details_str))
 }
 
 /// 仅计算买卖比和价格位置（轻量级，无需完整分析）。
@@ -731,41 +731,50 @@ mod tests {
 
     fn make_breakout_transactions() -> Vec<TransactionPoint> {
         let mut txns = Vec::new();
-        // 阶段1 (0-19): 密集放量拉升，主动买为主
+        // 阶段1 (0-19): 9:30-9:39 密集放量拉升，主动买为主
         for i in 0..20 {
             let time = t(9, 30 + (i as u32) / 2, (i as u32 % 2) * 30);
-            let price = 100.0 + (i as f64) * 0.15;
-            let vol = 80000 + (i as i32 * 2000) as i64;
+            let price = 100.0 + (i as f64) * 0.08;
+            let vol = 60000 + (i as i32 * 1000) as i64;
             txns.push(TransactionPoint {
                 time, price, vol,
                 trade_count: (vol / 3000 + 1) as i32,
                 bs_flag: 0,
             });
         }
-        // 阶段2 (20-49): 高位横盘，开始出货
-        for i in 0..30 {
-            let time = t(9, 33 + (i as u32) / 2, (i as u32 % 2) * 30);
-            let price = 103.0 - (i as f64) * 0.01;
-            let vol = 40000 - (i as i32 * 500) as i64;
-            let bs_flag = if i % 3 == 0 { 0 } else { 1 };
+        // 阶段2 (20-59): 10:20-10:59 高位横盘，主动买为主
+        for i in 0..40 {
+            let idx = 20 + i as u32;
+            let time = t(10 + idx / 60, idx % 60, 0);
+            let price = 102.0 + (i as f64 % 5.0) * 0.01;
+            let vol = 30000 + (i as i32 % 3) * 1000;
+            let bs_flag = if i % 5 == 0 { 1 } else { 0 };
             txns.push(TransactionPoint {
-                time, price, vol: vol.max(5000),
-                trade_count: (vol.max(5000) / 5000 + 1) as i32,
+                time, price, vol: vol as i64,
+                trade_count: (vol / 3000 + 1) as i32,
                 bs_flag,
             });
         }
-        // 阶段3 (50-99): 持续出货
-        for i in 0..50 {
-            let h = 9 + (33 + i as u32) / 60;
-            let m = (33 + i as u32) % 60;
-            if h >= 15 { break; }
-            let time = t(h, m, 0);
-            let price = 102.5 - (i as f64) * 0.04;
-            let vol = 50000 + (i as i32 * 1000) as i64;
-            let bs_flag = if i % 10 < 3 { 0 } else { 1 };
+        // 阶段3 (60-79): 11:00-11:19 整固，主动买为主
+        for i in 0..20 {
+            let time = t(11, i as u32, 0);
+            let price = 102.5 + (i as f64 % 4.0) * 0.01;
+            let vol = 35000;
             txns.push(TransactionPoint {
                 time, price, vol,
-                trade_count: (vol / 4000 + 1) as i32,
+                trade_count: (vol / 3000 + 1) as i32,
+                bs_flag: 0,
+            });
+        }
+        // 阶段4 (80-109): 14:30-14:59 尾盘放量突破拉升，主动买为主
+        for i in 0..30 {
+            let time = t(14, 30 + i as u32, 0);
+            let price = 103.0 + (i as f64) * 0.05;
+            let vol = 500000;
+            let bs_flag = if i % 6 == 0 { 1 } else { 0 };
+            txns.push(TransactionPoint {
+                time, price, vol,
+                trade_count: (vol / 3000 + 1) as i32,
                 bs_flag,
             });
         }
@@ -821,7 +830,7 @@ mod tests {
         let txns = make_breakout_transactions();
         let result = analyze_transactions(&txns, 99.5, 106.0, 100.0).unwrap();
         assert!(result.is_breakout, "强势数据应判断为真突破");
-        assert!(result.confidence >= 0.5, "置信度应较高");
+        assert!(result.confidence >= 50.0, "置信度应较高");
         assert!(result.buy_vol_ratio > 0.5, "主动买占比应过半");
         println!("真突破: confidence={:.3} conclusion={} details={}",
                  result.confidence, result.conclusion, result.details);
@@ -834,7 +843,7 @@ mod tests {
         println!("假突破: buy_ratio={:.3} sell_ratio={:.3} confidence={:.3} conclusion={} details={}",
                  result.buy_vol_ratio, result.sell_vol_ratio, result.confidence,
                  result.conclusion, result.details);
-        assert!(result.conclusion.contains("假突破") || result.confidence < 0.6,
+        assert!(result.conclusion.contains("假突破") || result.confidence < 60.0,
                 "弱势数据置信度应较低");
     }
 

@@ -298,14 +298,14 @@ mod tests {
 
     #[test]
     fn test_false_sell_returns_some() {
-        let d = FalseSellDetector::new(0.50);
+        let d = FalseSellDetector::new(50);
         let r = d.analyze(&make_false_sell_ticks());
         assert!(r.is_some());
     }
 
     #[test]
     fn test_false_sell_higher_than_true_sell() {
-        let d = FalseSellDetector::new(0.50);
+        let d = FalseSellDetector::new(50);
         let false_r = d.analyze(&make_false_sell_ticks()).unwrap();
         let true_r = d.analyze(&make_true_sell_ticks()).unwrap();
         // 假压制得分应显著高于真出货
@@ -319,18 +319,18 @@ mod tests {
 
     #[test]
     fn test_penalty_for_price_drop() {
-        let d = FalseSellDetector::new(0.50);
+        let d = FalseSellDetector::new(50);
         let mut ticks = make_false_sell_ticks();
         // 修改为大幅下跌
         let n = ticks.len();
         ticks[n - 1].price = ticks[0].price - 0.15;
         let r = d.analyze(&ticks).unwrap();
-        assert!(r.score < 0.5, "score should be heavily penalized: {}", r.score);
+        assert!(r.score < 50, "score should be heavily penalized: {}", r.score);
     }
 
     #[test]
     fn test_neg_ratio_scores() {
-        let d = FalseSellDetector::new(0.50);
+        let d = FalseSellDetector::new(50);
         // 全部卖盘
         let mut ticks = vec![];
         for i in 0..20 {

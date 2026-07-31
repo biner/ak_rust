@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_analyze_returns_none_for_too_few_ticks() {
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let ticks = vec![
             AuctionTick { time: t(9, 20, 0), price: 10.0, matched: 100, unmatched: 0 };
             10
@@ -395,12 +395,12 @@ mod tests {
 
     #[test]
     fn test_analyze_returns_some_for_valid_data() {
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let ticks = make_valid_ticks();
         let result = s.analyze(&ticks, None, None, None, None);
         assert!(result.is_some());
         let r = result.unwrap();
-        assert!(r.score >= 0.0 && r.score <= 1.0);
+        assert!((0..=100).contains(&r.score));
         assert_eq!(r.n, ticks.len());
     }
 
@@ -423,7 +423,7 @@ mod tests {
             AuctionTick { time: t(9, 25, 5), price: 10.08, matched: 100, unmatched: 0 },
             AuctionTick { time: t(9, 25, 10), price: 10.09, matched: 100, unmatched: 0 },
         ];
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let r = s.analyze(&ticks, None, None, None, None).unwrap();
         // Distinct prices: 10.00, 10.01, 10.02, 10.03, 10.05, 10.06, 10.07, 10.08, 10.09 = 9 levels
         // Steps = 8, eff_steps = 8 (>=2)
@@ -446,7 +446,7 @@ mod tests {
         for _ in 0..6 {
             ticks.push(AuctionTick { time: t(9, 23, 0), price: 10.02, matched: 100, unmatched: 0 });
         }
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let r = s.analyze(&ticks, None, None, None, None).unwrap();
         assert!(r.neg_pos_alt);
         // ni = [0], pi = [1, 2], max(ni)=0 < max(pi)=2 → buy_rev=true
@@ -473,7 +473,7 @@ mod tests {
         ticks[n - 1].price = 10.11;
         ticks[n - 1].unmatched = -600; // < -500 AND price >= third-from-last (10.10)
 
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let r = s.analyze(&ticks, None, None, None, None).unwrap();
         assert!(r.end_p);
     }
@@ -485,7 +485,7 @@ mod tests {
         let n = ticks.len();
         ticks[n - 1].price = ticks[0].price - 0.02;
 
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let before = s.analyze(&make_valid_ticks(), None, None, None, None).unwrap();
         let after = s.analyze(&ticks, None, None, None, None).unwrap();
         assert!(after.score <= before.score);
@@ -494,7 +494,7 @@ mod tests {
     #[test]
     fn test_high_open() {
         let ticks = make_valid_ticks();
-        let s = AuctionScanner::new(0.50);
+        let s = AuctionScanner::new(50);
         let r = s.analyze(&ticks, Some(10.50), Some(10.00), None, None).unwrap();
         assert_eq!(r.oh, Some(true));
 
@@ -505,8 +505,8 @@ mod tests {
     #[test]
     fn test_match_threshold() {
         let ticks = make_valid_ticks();
-        let s_strict = AuctionScanner::new(0.90);
-        let s_loose = AuctionScanner::new(0.00);
+        let s_strict = AuctionScanner::new(90);
+        let s_loose = AuctionScanner::new(0);
 
         let r_strict = s_strict.analyze(&ticks, None, None, None, None).unwrap();
         let r_loose = s_loose.analyze(&ticks, None, None, None, None).unwrap();

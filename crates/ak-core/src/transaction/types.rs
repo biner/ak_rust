@@ -69,7 +69,7 @@ pub struct TransactionAnalysisResult {
     // ── 综合判断 ──
     /// 是否是真突破
     pub is_breakout: bool,
-    /// 置信度 [0, 1]
+    /// 置信度 [0, 100]
     pub confidence: f64,
     /// 分析结论描述
     pub conclusion: String,
@@ -98,7 +98,7 @@ pub struct BreakoutResult {
     pub is_strong: bool,
     /// 分类标签（强势/普通/弱势）
     pub classification: String,
-    /// 置信度 [0, 1]
+    /// 置信度 [0, 100]
     pub confidence: f64,
     /// 分析明细
     pub details: String,
