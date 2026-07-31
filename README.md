@@ -428,7 +428,7 @@ if scan:
 | Crate | 路径 | 职责 | 依赖 |
 |-------|------|------|------|
 | **ak-core** | `crates/ak-core` | 核心算法：分时图、逐笔成交、集竞扫描、形态分类、虚假卖出、突破检测 | chrono |
-| **ak-signals** | `crates/ak-signals` | 技术指标信号：WaveTrend / DMI / IC / TTM / OSC / VOL 信号计算与调度 | ak-core, ak-signal-macros, czsc-ta, talib-rs, inventory |
+| **ak-signals** | `crates/ak-signals` | 技术指标信号：WaveTrend / DMI / IC / TTM / OSC / VOL 信号计算与调度 | ak-core, ak-signal-macros, talib-rs, inventory |
 | **ak-signal-macros** | `crates/ak-signal-macros` | 过程宏：`#[signal]` 编译期信号注册 | proc-macro2, syn, quote |
 | **ak-python** | `crates/ak-python` | PyO3 绑定层，将 Rust 函数暴露为 Python `_native` 模块 | ak-core, ak-signals, pyo3 |
 
@@ -475,7 +475,7 @@ python -c "from ak_rust import ak_signal_list; print(ak_signal_list())"
                   └──────┬───────┘
                          │ proc-macro
                   ┌──────▼───────┐
-                  │  ak-signals  │──── czsc-ta, talib-rs
+                  │  ak-signals  │──── talib-rs
                   └──────┬───────┘
                          │
               ┌──────────▼──────────┐
@@ -495,8 +495,7 @@ python -c "from ak_rust import ak_signal_list; print(ak_signal_list())"
 - **Rust** — 核心算法，零成本抽象，类型安全
 - **PyO3 (0.28)** — Rust ↔ Python 互操作（abi3-py310）
 - **maturin** — Python 包构建与发布
-- **TA-Lib (talib-rs 0.1.2)** — DMI / IC 技术指标计算
-- **czsc-ta** — CZSC 兼容的纯 Rust TA 算子（SMA）
+- **TA-Lib (talib-rs 0.1.2)** — DMI / IC / TTM 技术指标计算
 - **chrono (0.4)** — 时间序列处理
 - **inventory (0.3)** — 编译期信号注册表收集
 - **czsc** — Python 侧信号协同调度（可选依赖）

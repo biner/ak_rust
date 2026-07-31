@@ -19,7 +19,7 @@ fn compute_ttm_full(
 
     let hhv = math_operator::max(high, kc_length).unwrap();
     let llv = math_operator::min(low, kc_length).unwrap();
-    let ma_close = czsc_ta::pure::sma(close, kc_length);
+    let ma_close = overlap::sma(close, kc_length).unwrap();
 
     let avg1: Vec<f64> = hhv.iter().zip(llv.iter()).map(|(h, l)| (h + l) / 2.0).collect();
     let avg2: Vec<f64> = avg1.iter().zip(ma_close.iter()).map(|(a, m)| (a + m) / 2.0).collect();

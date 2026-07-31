@@ -10,7 +10,6 @@ path = "src/lib.rs"
 [dependencies]
 ak-core = { path = "../ak-core" }
 ak-signal-macros = { path = "../ak-signal-macros" }
-czsc-ta = { path = "../../../czsc/crates/czsc-ta" }
 talib-rs = "=0.1.2"
 inventory = "0.3"
 
