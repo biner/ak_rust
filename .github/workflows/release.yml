@@ -32,6 +32,14 @@ jobs:
         target: [x86_64, x86_64-unknown-linux-musl, aarch64]
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Debug workspace (checkout 内容与 commit)
+        run: |
+          pwd
+          ls -la
+          git log -1 --oneline
+          test -f Cargo.toml && echo "Cargo.toml: FOUND" || echo "Cargo.toml: MISSING"
+          test -f pyproject.toml && echo "pyproject.toml: FOUND" || echo "pyproject.toml: MISSING"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -53,6 +61,7 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -73,6 +82,7 @@ jobs:
         target: [x64]
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
