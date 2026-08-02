@@ -160,7 +160,7 @@ jobs:
         with:
           working-directory: dist
           command: publish
-          args: --no-build --skip-existing --username __token__ --repository testpypi
+          args: --skip-existing --username __token__ --repository testpypi
 
       - name: Publish to PyPI
         if: >-
@@ -172,4 +172,4 @@ jobs:
         with:
           working-directory: dist
           command: publish
-          args: --no-build --skip-existing --username __token__
+          args: --skip-existing --username __token__
