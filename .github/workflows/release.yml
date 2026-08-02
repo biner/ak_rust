@@ -39,7 +39,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          # 可选：为不同 target 分别缓存，避免混淆
           key: ${{ matrix.target }}
 
       - uses: actions/setup-python@v5
@@ -54,12 +53,8 @@ jobs:
           args: --release --out dist --verbose
           sccache: "true"
         env:
-          # musl 强制静态链接 OpenSSL（若项目依赖 OpenSSL）
           OPENSSL_STATIC: ${{ contains(matrix.target, 'musl') && '1' || '' }}
-          # 降低并行度防止内存溢出（尤其 aarch64 模拟编译）
           CARGO_BUILD_JOBS: 2
-          # 若需手动指定 aarch64 链接器，可取消注释：
-          # CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - uses: actions/upload-artifact@v4
         with:
@@ -125,8 +120,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 源码包不需要 Rust 编译，但若需要缓存可加，此处省略
-
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
@@ -165,8 +158,9 @@ jobs:
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.TESTPYPI_API_TOKEN }}
         with:
+          working-directory: dist
           command: publish
-          args: --skip-existing --username __token__ --repository testpypi
+          args: --no-build --skip-existing --username __token__ --repository testpypi
 
       - name: Publish to PyPI
         if: >-
@@ -174,8 +168,8 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
         uses: PyO3/maturin-action@v1
         env:
-          # 使用 API Token（若启用 OIDC 可删除此 env）
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
+          working-directory: dist
           command: publish
-          args: --skip-existing --username __token__
+          args: --no-build --skip-existing --username __token__
