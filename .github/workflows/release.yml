@@ -27,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, x86_64-musl, aarch64]
+        # musl 必须用完整 target 三元组：maturin-action 只对 gnu 短名做别名映射，
+        # "x86_64-musl" 会原样传给 rustup 导致 target spec 找不到
+        target: [x86_64, x86_64-unknown-linux-musl, aarch64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,6 +38,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
+          manylinux: auto
           args: --release --out dist
           sccache: "true"
       - uses: actions/upload-artifact@v4
