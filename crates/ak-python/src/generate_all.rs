@@ -154,20 +154,36 @@ fn generate_all_signals(
         }
     }
 
-    let czsc_cfg = PyList::empty(py);
-    for &i in &czsc_indices {
-        let item = signals_config.get_item(i)?;
-        czsc_cfg.append(item)?;
-    }
+    // czsc 为可选依赖：仅当配置中存在非 ak 信号时才 import czsc，
+    // 纯 ak 信号路径不依赖 czsc（未安装 czsc 时依然可用）。
+    let czsc_result: Option<Py<PyAny>> = if czsc_indices.is_empty() {
+        None
+    } else {
+        let czsc_cfg = PyList::empty(py);
+        for &i in &czsc_indices {
+            let item = signals_config.get_item(i)?;
+            czsc_cfg.append(item)?;
+        }
 
-    let czsc_mod = py.import("czsc")?;
-    let czsc_result = czsc_mod.call_method1(
-        "generate_czsc_signals",
-        (bars, czsc_cfg, sdt, init_n, df),
-    )?;
+        let czsc_mod = py.import("czsc").map_err(|_| {
+            pyo3::exceptions::PyImportError::new_err(
+                "signals_config 包含非 ak 信号，但未安装 czsc；请安装: pip install ak-rust[czsc]",
+            )
+        })?;
+        let result = czsc_mod.call_method1(
+            "generate_czsc_signals",
+            (bars, czsc_cfg, sdt, init_n, df),
+        )?;
+        Some(result.into_any().unbind())
+    };
 
     if ak_indices.is_empty() {
-        return Ok(czsc_result.into_any().unbind());
+        return match czsc_result {
+            Some(r) => Ok(r),
+            None => Err(pyo3::exceptions::PyValueError::new_err(
+                "signals_config 不能为空",
+            )),
+        };
     }
 
     let bar_vec = parse_bars(bars)?;
@@ -188,15 +204,22 @@ fn generate_all_signals(
         }
         pandas.call_method1("DataFrame", (records,))?
     } else if df {
-        czsc_result.into_any().cast_into::<PyAny>()?
+        // czsc_indices 非空，czsc_result 必然为 Some
+        czsc_result.unwrap().into_bound(py)
     } else {
-        pandas.call_method1("DataFrame", (czsc_result,))?
+        pandas.call_method1("DataFrame", (czsc_result.unwrap(),))?
     };
 
     if !ak_configs.is_empty() {
         let nrows = sdf.call_method0("__len__")?.extract::<usize>()?;
         let nbars = ak_results.len() / ak_configs.len();
         let offset = nbars.saturating_sub(nrows);
+        // 用 insert 而非 set_item：pandas 3.x 下从扩展侧调用 __setitem__
+        // 会触发 ChainedAssignmentError 误报（对象不在调用帧局部变量中）。
+        let mut col_idx = sdf
+            .getattr("columns")?
+            .call_method0("__len__")?
+            .extract::<usize>()?;
         for (cfg_idx, cfg) in ak_configs.iter().enumerate() {
             let col_name = ak_col_name(&cfg.name, &cfg.freq, &cfg.params);
             let start = cfg_idx * nbars + offset;
@@ -206,15 +229,16 @@ fn generate_all_signals(
                 .map(|r| format!("{}_{}_{}_{}", r.v1, r.v2, r.v3, r.score))
                 .collect();
             let series = pandas.call_method1("Series", (values,))?;
-            sdf.set_item(col_name, series)?;
+            sdf.call_method1("insert", (col_idx, col_name, series))?;
+            col_idx += 1;
         }
     }
 
     if df {
         Ok(sdf.into_any().unbind())
     } else {
-        let records = sdf.call_method0("to_dict")?;
-        let records = records.call_method1("orient", ("records",))?;
+        // 一步调用 to_dict(orient="records")，返回 list[dict]；拆两步会因 dict 无 orient 方法而报错
+        let records = sdf.call_method1("to_dict", ("records",))?;
         Ok(records.into_any().unbind())
     }
 }
