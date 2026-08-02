@@ -1,8 +1,5 @@
 name: release
 
-# 触发方式：
-#   1. 推送 v* 标签（如 git tag v0.1.0 && git push --tags）→ 构建全平台 wheel + sdist 并发布到 PyPI
-#   2. 手动触发（workflow_dispatch）→ 仅构建产物，可选发布到 TestPyPI / PyPI
 on:
   push:
     tags:
@@ -22,33 +19,48 @@ permissions:
   contents: read
 
 jobs:
-  # ── 各平台 wheel 构建（abi3-py310：每平台一个 wheel 覆盖 Python 3.10+）──
   linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # musl 必须用完整 target 三元组：maturin-action 只对 gnu 短名做别名映射，
-        # "x86_64-musl" 会原样传给 rustup 导致 target spec 找不到
-        target: [x86_64, x86_64-unknown-linux-musl, aarch64]
+        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-gnu]
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - name: Debug workspace (checkout 内容与 commit)
+
+      - name: Install system dependencies
         run: |
-          pwd
-          ls -la
-          git log -1 --oneline
-          test -f Cargo.toml && echo "Cargo.toml: FOUND" || echo "Cargo.toml: MISSING"
-          test -f pyproject.toml && echo "pyproject.toml: FOUND" || echo "pyproject.toml: MISSING"
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            clang \
+            libssl-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # 可选：为不同 target 分别缓存，避免混淆
+          key: ${{ matrix.target }}
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - uses: PyO3/maturin-action@v1
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist
+          args: --release --out dist --verbose
           sccache: "true"
+        env:
+          # musl 强制静态链接 OpenSSL（若项目依赖 OpenSSL）
+          OPENSSL_STATIC: ${{ contains(matrix.target, 'musl') && '1' || '' }}
+          # 降低并行度防止内存溢出（尤其 aarch64 模拟编译）
+          CARGO_BUILD_JOBS: 2
+          # 若需手动指定 aarch64 链接器，可取消注释：
+          # CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
@@ -61,15 +73,21 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
+
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --out dist --verbose
           sccache: "true"
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}
@@ -82,15 +100,21 @@ jobs:
         target: [x64]
     steps:
       - uses: actions/checkout@v4
+
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --out dist --verbose
           sccache: "true"
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.target }}
@@ -100,29 +124,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # 源码包不需要 Rust 编译，但若需要缓存可加，此处省略
+
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
           path: dist
 
-  # ── 汇总产物并发布 ──
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    # tag 推送 → 正式发布；手动触发 → 仅当选择了 testpypi/pypi 时发布
     if: >-
       startsWith(github.ref, 'refs/tags/') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target != 'none')
     needs: [linux, macos, windows, sdist]
-    # 发布作业使用 GitHub Environment（可在 Settings > Environments 配置审批规则）
     environment: release
     permissions:
       contents: read
-      # Trusted Publishing (OIDC)：在 PyPI 项目配置 trusted publisher 后可免 token 发布
       id-token: write
     steps:
       - uses: actions/download-artifact@v4
@@ -130,6 +154,7 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
           path: dist
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -138,7 +163,6 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
         uses: PyO3/maturin-action@v1
         env:
-          # 手动触发 TestPyPI 时使用 TESTPYPI_API_TOKEN
           MATURIN_PYPI_TOKEN: ${{ secrets.TESTPYPI_API_TOKEN }}
         with:
           command: publish
@@ -150,9 +174,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
         uses: PyO3/maturin-action@v1
         env:
-          # 方式一（默认）：在仓库 Settings → Secrets and variables → Actions
-          # 添加名为 PYPI_API_TOKEN 的 PyPI API token（scope 限定到本项目）
-          # 方式二：改用 Trusted Publishing，删除本 env 即可（需 PyPI 项目配置 OIDC）
+          # 使用 API Token（若启用 OIDC 可删除此 env）
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
           command: publish
