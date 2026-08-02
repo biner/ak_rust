@@ -7,6 +7,7 @@
 from typing import Optional
 
 from .signaling import generate_all_signals
+from .zs import get_zs_seq
 from .models import (
     TickChartResult,
     TransactionAnalysisResult,
@@ -130,6 +131,8 @@ __all__ = [
     "screening_metrics",
     "auction_scan",
     "auction_false_sell",
+    # 中枢识别（委托 czsc Rust 核心）
+    "get_zs_seq",
     # 直接透传的信号函数
     "generate_ak_signals",
     "ak_signal_list",
