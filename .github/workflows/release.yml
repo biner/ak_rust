@@ -1,0 +1,146 @@
+name: release
+
+# 触发方式：
+#   1. 推送 v* 标签（如 git tag v0.1.0 && git push --tags）→ 构建全平台 wheel + sdist 并发布到 PyPI
+#   2. 手动触发（workflow_dispatch）→ 仅构建产物，可选发布到 TestPyPI / PyPI
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "手动触发的发布目标"
+        type: choice
+        options:
+          - none
+          - testpypi
+          - pypi
+        default: none
+
+permissions:
+  contents: read
+
+jobs:
+  # ── 各平台 wheel 构建（abi3-py310：每平台一个 wheel 覆盖 Python 3.10+）──
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, x86_64-musl, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  # ── 汇总产物并发布 ──
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    # tag 推送 → 正式发布；手动触发 → 仅当选择了 testpypi/pypi 时发布
+    if: >-
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target != 'none')
+    needs: [linux, macos, windows, sdist]
+    # 发布作业使用 GitHub Environment（可在 Settings > Environments 配置审批规则）
+    environment: release
+    permissions:
+      contents: read
+      # Trusted Publishing (OIDC)：在 PyPI 项目配置 trusted publisher 后可免 token 发布
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
+        uses: PyO3/maturin-action@v1
+        env:
+          # 手动触发 TestPyPI 时使用 TESTPYPI_API_TOKEN
+          MATURIN_PYPI_TOKEN: ${{ secrets.TESTPYPI_API_TOKEN }}
+        with:
+          command: publish
+          args: --skip-existing --username __token__ --repository testpypi
+
+      - name: Publish to PyPI
+        if: >-
+          startsWith(github.ref, 'refs/tags/') ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
+        uses: PyO3/maturin-action@v1
+        env:
+          # 方式一（默认）：在仓库 Settings → Secrets and variables → Actions
+          # 添加名为 PYPI_API_TOKEN 的 PyPI API token（scope 限定到本项目）
+          # 方式二：改用 Trusted Publishing，删除本 env 即可（需 PyPI 项目配置 OIDC）
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: publish
+          args: --skip-existing --username __token__
