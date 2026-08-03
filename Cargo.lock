@@ -4,14 +4,14 @@ version = 4
 
 [[package]]
 name = "ak-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
 ]
 
 [[package]]
 name = "ak-python"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ak-core",
  "ak-signals",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "ak-signal-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "ak-signals"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ak-core",
  "ak-signal-macros",

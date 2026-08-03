@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ak_rust"
-version = "0.1.0"
+version = "0.1.1"
 description = "A-share market analysis toolkit: tick chart, transaction analysis, breakout detection, auction scanning"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -14,7 +14,7 @@ dependencies = ["pandas>=2.0"]
 
 [project.optional-dependencies]
 # czsc 为可选依赖：仅当 signals_config 含非 ak 信号时才导入，纯 ak 信号路径不依赖
-czsc = ["czsc>=0.10.0"]
+czsc = ["czsc>=1.0.0rc8"]
 
 [tool.maturin]
 module-name = "ak_rust._native"
