@@ -5,6 +5,7 @@ mod transaction;
 mod auction;
 mod dispatch;
 mod generate_all;
+mod zs;
 
 #[pymodule]
 fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -13,5 +14,6 @@ fn _native(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     auction::register_all(m)?;
     dispatch::register(m)?;
     generate_all::register(m)?;
+    zs::register(m)?;
     Ok(())
 }
